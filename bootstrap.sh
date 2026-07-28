@@ -128,21 +128,22 @@ else
   }
 fi
 
+echo "==> Step 7: Windows Terminal"
+# Everything below this point is driven from inside WSL through Windows
+# interop, so there is no separate PowerShell step to run.
+"$DIR/scripts/sync-windows-terminal.sh" || \
+  echo "    Terminal sync failed; run ./scripts/sync-windows-terminal.sh later."
+
 cat <<'NEXT'
 
-==> WSL side done.
+==> Done.
 
-Two things still live on Windows, because they are Windows programs:
-WezTerm (the terminal that draws the pixels) and the font it renders with.
+Open Windows Terminal. The Ubuntu profile is now the default, themed
+rose-pine, in Hack Nerd Font.
 
-From a Windows PowerShell window, in this repo's windows/ folder:
+If you were already in a shell, start a new one so zsh and the Nix
+profile are picked up.
 
-    powershell -ExecutionPolicy Bypass -File .\setup-windows.ps1
-    powershell -ExecutionPolicy Bypass -File .\settings.ps1     # optional
-
-The repo is reachable from Windows at:
-    \\wsl.localhost\<your-distro>\home\<your-user>\.dotfiles\windows
-
-Then launch WezTerm. It opens straight into this WSL distro.
-From then on, ./rebuild.sh is all you need for Linux-side changes.
+From here on, ./rebuild.sh applies every change - packages, shell,
+editor, and the terminal look - in one command.
 NEXT

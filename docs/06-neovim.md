@@ -218,7 +218,7 @@ sets the `require` path, since the repo is `rose-pine/neovim`.
 release string looks like `6.18.x-microsoft-standard-WSL2`, so matching `WSL` is
 sufficient here.
 
-Transparency makes Neovim skip painting a background, letting WezTerm's
+Transparency makes Neovim skip painting a background, letting the terminal's
 opacity and Acrylic backdrop show through. Without it the editor is an opaque
 rectangle and the terminal blur is invisible behind it.
 

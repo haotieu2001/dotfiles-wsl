@@ -63,6 +63,7 @@ version to keep current.
     git
     herdr
     claude-code
+    nerd-fonts.hack
   ];
 ```
 
@@ -82,14 +83,15 @@ Search for more at [search.nixos.org](https://search.nixos.org/packages).
   fonts.fontconfig.enable = true;
 ```
 
-Registers Nix-installed fonts with Linux fontconfig. **This does not help
-WezTerm**, which is a Windows process reading the Windows font store. It matters
-only for Linux GUI apps under WSLg. The font is installed twice, once per side;
-see [09-windows-scripts.md](09-windows-scripts.md).
+Registers Nix-installed fonts with Linux fontconfig. That covers Linux GUI apps
+under WSLg, but **not** the terminal you actually look at, which is a Windows
+process reading the Windows font store.
 
-Note this repo does not put `nerd-fonts.hack` in `home.packages`, because the
-copy that actually gets rendered is the Windows one. Add it if you run Linux GUI
-terminals.
+`nerd-fonts.hack` is nonetheless in `home.packages`, and it is the single source
+for both sides: `scripts/sync-windows-terminal.sh` copies these exact files out
+of the Nix store into the Windows font directory. So the font version is pinned
+by `flake.lock` like everything else, rather than by a download URL. See
+[09-windows-bridge.md](09-windows-bridge.md).
 
 ## Environment
 
@@ -240,12 +242,13 @@ directory, so the rest of `~/.claude/` (credentials, project history, caches)
 stays local and untracked.
 
 ```nix
-  # No ~/.config/wezterm symlink here.
+  # No terminal-emulator config is symlinked here.
 ```
 
-The deliberate omission. WezTerm runs on Windows and cannot follow a symlink
-created inside WSL, so linking it here would achieve nothing. The Windows loader
-stub reads the repo copy directly instead. See [05-wezterm.md](05-wezterm.md).
+The deliberate omission. The terminal is a Windows process and cannot read Linux
+dotfiles at all, so a symlink would achieve nothing. Its settings live in
+`home/windows-terminal/` and are pushed across the boundary by the sync script
+instead. See [05-terminal.md](05-terminal.md).
 
 ```nix
   home.file.".claude/CLAUDE.md".source =

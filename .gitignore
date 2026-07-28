@@ -16,3 +16,6 @@ desktop.ini
 
 # neovim plugin state. Delete this line if you want plugin versions pinned.
 home/.config/nvim/lazy-lock.json
+
+# guard: a mis-resolved Windows home would write here
+AppData/

@@ -29,11 +29,16 @@ in
 
     herdr       # agent multiplexer (was `brews = [ "herdr" ]` on macOS)
     claude-code # was `casks = [ "claude-code" ]` on macOS
+
+    # The terminal font. Pinned here by flake.lock, then copied across the
+    # WSL/Windows boundary by scripts/sync-windows-terminal.sh, because the
+    # Windows font renderer cannot see Linux fontconfig.
+    nerd-fonts.hack
   ];
 
-  # Installs the font into the *Linux* fontconfig tree. That covers Linux GUI
-  # apps under WSLg. It does NOT reach a WezTerm running as a Windows app,
-  # which is why setup-windows.ps1 installs Hack Nerd Font on Windows too.
+  # Registers the font with Linux fontconfig. The Windows terminal that
+  # actually draws your glyphs cannot see this, so the same Nix-store font
+  # files are copied to the Windows font directory by the sync script.
   fonts.fontconfig.enable = true;
 
   home.sessionVariables = {
@@ -96,9 +101,9 @@ in
   home.file.".claude/settings.json".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.claude/settings.json";
 
-  # The WezTerm config still lives in this repo, but it is consumed from the
-  # Windows side over \\wsl.localhost, so there is no ~/.config/wezterm symlink
-  # here. windows/setup-windows.ps1 writes the loader stub. See docs/04-wezterm.md.
+  # No terminal-emulator config is symlinked here. The terminal is a Windows
+  # process and cannot read Linux dotfiles, so its settings are pushed across
+  # the boundary from home/windows-terminal/ instead. See docs/05-terminal.md.
 
   home.file.".claude/CLAUDE.md".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";

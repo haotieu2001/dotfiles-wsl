@@ -11,9 +11,14 @@ the config below, symlinked live by `home.nix`.
 
 The video mentions herdr may be the only multiplexer that also works on Windows.
 For this setup that matters in a specific way: it runs as a **Linux** process
-inside WSL, so its sessions survive independently of whichever WezTerm window is
+inside WSL, so its sessions survive independently of whichever terminal window is
 attached. Close the terminal, reopen it, run `herdr`, and your agents are still
 running exactly where you left them.
+
+It also does the job the terminal emulator would otherwise do. That is why this
+port does not carry over the video's WezTerm config: with herdr providing
+workspaces, tabs, panes and detachable sessions, the host terminal only has to
+be a fast, correct VT renderer. See [05-terminal.md](05-terminal.md).
 
 Upstream also handles WSL explicitly, for example defaulting to its own drawn
 cursor under WSL to avoid host cursor flicker.

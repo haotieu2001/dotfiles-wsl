@@ -147,47 +147,55 @@ Log out and back in either way; `chsh` does not affect the current session.
 
 ### Prompt shows boxes or missing glyphs
 
-Starship's symbols need a Nerd Font **on Windows**. Re-run `setup-windows.ps1`,
-then sign out and back in. The Nix-installed font only serves Linux GUI apps.
+Starship's symbols need a Nerd Font **on Windows**. Run
+`./scripts/sync-windows-terminal.sh`, then sign out of Windows and back in;
+newly registered fonts are often invisible to already-running processes.
 
-## WezTerm
+## Terminal
 
-### Opens PowerShell instead of WSL
+### Colours or font did not change
 
-`WSL_DISTRO` in `home/.config/wezterm/wezterm.lua` must match `wsl -l -q`
-exactly, including any suffix like `Ubuntu-26.04`.
+Run the sync by hand and read what it says:
 
-### Config changes have no effect
-
-Check the stub actually points at your repo:
-
-```powershell
-Get-Content $env:USERPROFILE\.wezterm.lua
+```bash
+./scripts/sync-windows-terminal.sh
 ```
 
-The path must exist from Windows. Test it in Explorer. If the distro was renamed
-or the repo moved, re-run `setup-windows.ps1`.
+`no Windows Terminal profile named '<distro>' yet` means Windows Terminal has
+never generated a profile for this distro. Open it once, then re-run.
 
-### Starts in `/mnt/c/Users/...`
+`settings.json is not valid JSON (comments?)` means the script refused to touch
+your config rather than risk corrupting it. Open Windows Terminal, change any
+setting so it rewrites the file as plain JSON, then re-run.
 
-`default_cwd = "~"` is missing from the `wsl_domains` entry. The zsh `case`
-block in `home.nix` catches this too.
+### I want my old terminal settings back
+
+```
+<Windows profile>\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json.dotfiles-backup
+```
+
+Written before any change. The sync only ever adds its own scheme and patches
+the one WSL profile, so unrelated profiles and schemes are already preserved.
+
+### Boxes instead of glyphs
+
+The font is registered but Windows has not picked it up. Sign out and back in.
+Verify it registered:
+
+```bash
+reg.exe query 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts' | grep -i hack
+```
 
 ### Background is opaque
 
-`win32_system_backdrop` needs `window_background_opacity < 1.0`. If the terminal
-is translucent but Neovim is not, the colorscheme `transparency` flag is false -
-see [06-neovim.md](06-neovim.md).
+`useAcrylic` needs `opacity` below 100 in `home/windows-terminal/profile.json`.
+If the terminal is translucent but Neovim is not, the colourscheme
+`transparency` flag is false - see [06-neovim.md](06-neovim.md).
 
-### Font not found after installing
+### Starts in /mnt/c/...
 
-Windows does not always expose a newly registered font to running processes.
-Sign out and back in. Verify it registered:
-
-```powershell
-Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts' |
-  Select-Object -Property '*Hack*'
-```
+The zsh guard in `home.nix` bounces you to `$HOME`. If it is not firing, you are
+probably still on bash; finish the `chsh` step.
 
 ## Neovim
 
@@ -252,7 +260,7 @@ reason; if you enabled the mouse, that is the cause.
 
 ### Sessions vanish after closing the terminal
 
-They should not - the server is a Linux process independent of WezTerm. But
+They should not - the server is a Linux process independent of the terminal. But
 `wsl --shutdown`, or Windows fast startup, stops the whole VM and everything in
 it. Check for leftover state with `herdr status server`.
 

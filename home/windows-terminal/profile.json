@@ -1,0 +1,15 @@
+{
+  "colorScheme": "Rose Pine Moon",
+  "font": {
+    "face": "Hack Nerd Font",
+    "size": 11
+  },
+  "opacity": 90,
+  "useAcrylic": true,
+  "padding": "12",
+  "antialiasingMode": "grayscale",
+  "cursorShape": "filledBox",
+  "scrollbarState": "hidden",
+  "snapOnInput": true,
+  "historySize": 20000
+}

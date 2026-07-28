@@ -43,16 +43,15 @@ That splits the video's setup across a boundary:
 
 | Component | Runs where | Installed by |
 | --- | --- | --- |
-| WezTerm | Windows | winget, via `setup-windows.ps1` |
-| Hack Nerd Font | Windows (and Linux) | `setup-windows.ps1` (and `home.nix`) |
+| Windows Terminal | Windows | ships with Windows; themed by the sync script |
+| Hack Nerd Font | Windows (and Linux) | `home.nix` (Nix store), copied across by the sync script |
 | zsh, Starship | WSL | `home.nix` |
 | Neovim, ripgrep, fd, fzf, jq, lazygit | WSL | `home.nix` |
 | herdr | WSL | `modules/herdr.nix` |
 | Claude Code / Codex / opencode | WSL | `home.nix` |
 
-The config *files* all stay in WSL, in this repo. Windows reaches in over
-`\\wsl.localhost` to read the one file it needs. See
-[05-wezterm.md](05-wezterm.md).
+The config *files* all stay in WSL, in this repo, and WSL pushes what Windows
+needs across the boundary itself. See [05-terminal.md](05-terminal.md).
 
 ## Line-level mapping
 
@@ -84,7 +83,9 @@ first place. So:
 
 - `claude-code` moves to `home.packages` (it is in nixpkgs, under an unfree license,
   which is why `flake.nix` sets `config.allowUnfree = true`).
-- `wezterm` moves to the Windows side.
+- `wezterm` is dropped entirely in favour of Windows Terminal, which is already
+  installed and needs no package manager. See [05-terminal.md](05-terminal.md)
+  for why the terminal emulator matters less here than it looks.
 - `herdr` gets packaged by hand in [`modules/herdr.nix`](03-modules-herdr-nix.md),
   pinned by version and hash. That is actually *stronger* than the Homebrew
   formula the video uses, because the hash makes the download verifiable.
@@ -93,7 +94,7 @@ The `cleanup = "zap"` guarantee (nothing installed outside the config survives a
 rebuild) is preserved for the Nix half automatically: anything not listed in
 `home.packages` is not in your profile after a switch.
 
-### `system.defaults` becomes a PowerShell script
+### `system.defaults` is dropped
 
 | macOS setting | Windows equivalent |
 | --- | --- |
@@ -106,10 +107,14 @@ rebuild) is preserved for the Nix half automatically: anything not listed in
 | `trackpad.Clicking = true` | `PrecisionTouchPad\TapsEnabled = 1` |
 | `finder.FXPreferredViewStyle = "Nlsv"` | no reliable equivalent, skipped |
 
-This is the one place where the port is genuinely weaker than the original.
-On macOS these are part of the declarative build. On Windows they are registry
-writes with no rollback. `settings.ps1` is idempotent, which is the most that
-can be claimed. It is also entirely optional; nothing else depends on it.
+An earlier version of this port shipped a `settings.ps1` that wrote these to
+the registry. It was removed. The reasoning: these are desktop appearance
+preferences, not development environment, and unlike everything else in this
+repo nothing reverts them. Shipping imperative registry writes under a banner of
+reproducibility was overclaiming. Set them once in the Windows Settings app.
+
+The one that genuinely affects the terminal, dark theme, is handled by the
+colour scheme instead.
 
 ### The Neovim clipboard needs a bridge
 

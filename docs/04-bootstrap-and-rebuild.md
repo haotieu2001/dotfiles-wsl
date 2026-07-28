@@ -11,8 +11,12 @@ Two scripts: one you run once, one you run forever after.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ln -sfn "$DIR" ~/.dotfiles
-exec home-manager switch --flake ~/.dotfiles#wsl -b backup
+home-manager switch --flake ~/.dotfiles#wsl -b backup
+exec "$DIR/scripts/sync-windows-terminal.sh"
 ```
+
+The sync runs after every switch. It is cheap and idempotent, so the terminal
+theme cannot drift from what is committed in the repo.
 
 - `set -euo pipefail` - exit on any failing command (`e`), on any undefined
   variable (`u`), and on a failure anywhere in a pipeline rather than only at
@@ -24,8 +28,8 @@ exec home-manager switch --flake ~/.dotfiles#wsl -b backup
   replace an existing link, `-n` treat an existing link to a directory as a file
   to replace rather than descending into it. Without `-n` you would eventually
   create `~/.dotfiles/dotfiles-wsl`.
-- `exec` - replace the shell with home-manager instead of forking, so its exit
-  code becomes the script's directly.
+- `exec` on the final line - replace the shell with the sync script instead of
+  forking, so its exit code becomes the script's directly.
 - `--flake ~/.dotfiles#wsl` - build the `homeConfigurations."wsl"` output.
 - `-b backup` - if activation is about to overwrite a file it does not manage
   (typically `~/.bashrc` or `~/.profile`), rename it to `<name>.backup` instead
@@ -177,9 +181,20 @@ The fallback printed on failure is to append `exec ~/.nix-profile/bin/zsh -l` to
 
 macOS already uses zsh, so the video has no equivalent step.
 
-### Step 7 - Windows instructions
+### Step 7 - Windows Terminal
 
-Prints where to go next. Covered in [09-windows-scripts.md](09-windows-scripts.md).
+```bash
+"$DIR/scripts/sync-windows-terminal.sh" || \
+  echo "    Terminal sync failed; run ./scripts/sync-windows-terminal.sh later."
+```
+
+Pushes the font and terminal theme across to Windows. There is no separate
+PowerShell step: WSL can call Windows executables and write to the Windows
+filesystem, so this runs inside the same bootstrap.
+
+The `||` matters. A terminal that is not themed yet is a cosmetic problem, not a
+reason to fail a bootstrap that has already installed everything else
+successfully. Covered in [09-windows-bridge.md](09-windows-bridge.md).
 
 ## Re-running
 
