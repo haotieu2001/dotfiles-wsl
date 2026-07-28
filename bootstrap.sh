@@ -81,8 +81,30 @@ echo "==> Step 5: first home-manager switch"
 # -b backup renames any file we are about to take over (~/.bashrc, ~/.profile)
 # to <name>.backup instead of aborting the whole activation.
 NIX_BIN="$(command -v nix)"
-"$NIX_BIN" run home-manager/release-26.05 -- \
-  switch --flake ~/.dotfiles#wsl -b backup
+
+# Retry on transient failure. WSL routes DNS through a proxy on the host
+# (usually 10.255.255.254), and it is briefly unreachable while the Nix daemon
+# and systemd units settle after Step 2. Fixed-output derivations download
+# inside the build sandbox, so they fail with "Could not resolve host" during
+# that window even though the flake inputs fetched fine moments earlier.
+# Nothing is misconfigured; it just needs another go.
+for attempt in 1 2 3; do
+  if "$NIX_BIN" run home-manager/release-26.05 -- \
+      switch --flake ~/.dotfiles#wsl -b backup; then
+    break
+  fi
+  if [ "$attempt" -eq 3 ]; then
+    echo ""
+    echo "    Switch failed three times."
+    echo "    If the errors said 'Could not resolve host', check DNS:"
+    echo "        curl -sSI https://cache.nixos.org >/dev/null && echo 'DNS ok'"
+    echo "    Then re-run ./bootstrap.sh. Already-downloaded packages are cached,"
+    echo "    so the retry picks up where this left off."
+    exit 1
+  fi
+  echo "    Attempt $attempt failed, retrying in $((attempt * 15))s (often transient DNS on WSL)..."
+  sleep "$((attempt * 15))"
+done
 # If this fails with "nix: command not found", open a new shell so the Nix
 # profile is on PATH, then re-run ./bootstrap.sh.
 

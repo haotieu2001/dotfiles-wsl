@@ -43,6 +43,61 @@ home-manager refuses to overwrite files it does not manage. Both scripts already
 pass `-b backup` to rename them instead. If you hit this, you ran home-manager
 by hand without that flag - use `./rebuild.sh`.
 
+### `Could not resolve host` during the first build
+
+```
+> trying https://downloads.claude.ai/claude-code-releases/2.1.187/linux-x64/claude
+> curl: (6) Could not resolve host: downloads.claude.ai
+error: cannot download claude from any mirror
+```
+
+**Almost always transient. Re-run `./bootstrap.sh`.** Since Nix caches what it
+already fetched, the retry resumes rather than starting over. `bootstrap.sh`
+now retries the switch three times on its own.
+
+The cause is a WSL timing quirk, not a misconfiguration. WSL routes DNS through
+a proxy on the Windows host (typically `10.255.255.254`, see `/etc/resolv.conf`),
+and that proxy is briefly unreachable while the Nix daemon and systemd units
+settle right after Step 2 installs Nix. Flake inputs are fetched by the daemon
+and usually land before the gap; fixed-output derivations like `claude-code`
+download inside the build sandbox moments later and hit it.
+
+The giveaway is that every retry fails inside a few seconds, and packages that
+came from `cache.nixos.org` in the same run succeeded.
+
+If it persists, confirm DNS actually works from inside the sandbox rather than
+just from your shell:
+
+```bash
+nix build --impure --no-link --expr '
+  (import <nixpkgs> {}).runCommand "dnsprobe" {
+    outputHashMode = "flat"; outputHashAlgo = "sha256";
+    outputHash = "0000000000000000000000000000000000000000000000000000000000000000";
+    nativeBuildInputs = [ (import <nixpkgs> {}).curl ];
+  } "cat /etc/resolv.conf 1>&2; curl -sS --connect-timeout 10 -o /dev/null http://cache.nixos.org/ 2>&1; exit 1"
+'
+```
+
+Read the log it prints. A nameserver line plus no `curl: (6)` means DNS is fine
+inside the sandbox and the earlier failure was the timing gap. A genuinely
+broken setup shows an empty or missing `resolv.conf`.
+
+Only if it is genuinely and repeatedly broken, give the sandbox a stable
+resolver by replacing the WSL-generated symlink:
+
+```bash
+sudo tee -a /etc/wsl.conf >/dev/null <<'EOF'
+
+[network]
+generateResolvConf = false
+EOF
+sudo rm -f /etc/resolv.conf
+printf 'nameserver 10.255.255.254\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf >/dev/null
+```
+
+Keep the WSL proxy first so split-DNS on a VPN or corporate network still
+resolves internal names. Then `wsl --shutdown` from PowerShell.
+
 ### The first build is extremely slow
 
 Expected once. If it is slow *every* time, check the repo is not on `/mnt/c`:
