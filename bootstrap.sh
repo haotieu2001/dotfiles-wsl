@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Takes a fresh WSL Ubuntu from nothing to a built home-manager config.
+# Run this once. After it finishes, use ./rebuild.sh for every later change.
+#
+# This is the WSL counterpart of the macOS bootstrap.sh. The big difference:
+# there is no nix-darwin and no sudo darwin-rebuild, because WSL Ubuntu is not
+# NixOS. home-manager runs standalone and owns only $HOME.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+echo "==> Step 0: confirm we are inside WSL"
+if ! grep -qi microsoft /proc/version 2>/dev/null; then
+  echo "    This does not look like WSL. On a normal Linux box the rest still"
+  echo "    works, but the Windows-side steps at the end will not apply."
+fi
+
+echo "==> Step 1: systemd"
+# The Determinate installer manages the Nix daemon through systemd. Older WSL
+# images boot without an init system, and Nix multi-user mode then has nothing
+# to start the daemon with.
+if [ -d /run/systemd/system ]; then
+  echo "    systemd is running, good"
+else
+  echo "    systemd is NOT running in this distro."
+  if ! grep -q 'systemd *= *true' /etc/wsl.conf 2>/dev/null; then
+    echo "    Enabling it in /etc/wsl.conf (needs sudo)..."
+    sudo tee -a /etc/wsl.conf >/dev/null <<'WSLCONF'
+
+[boot]
+systemd=true
+WSLCONF
+  fi
+  echo ""
+  echo "    Now restart WSL from a Windows PowerShell window:"
+  echo "        wsl --shutdown"
+  echo "    then reopen this distro and re-run ./bootstrap.sh"
+  exit 1
+fi
+
+echo "==> Step 2: Determinate Nix"
+if command -v nix >/dev/null 2>&1; then
+  echo "    nix already installed, skipping"
+else
+  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
+    | sh -s -- install --no-confirm
+  # shellcheck disable=SC1091
+  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+
+echo "==> Step 3: symlink this repo to ~/.dotfiles"
+# home.nix resolves its mkOutOfStoreSymlink paths through ~/.dotfiles, so this
+# has to exist before the first switch or the build will fail to find them.
+ln -sfn "$DIR" ~/.dotfiles
+
+echo "==> Step 4: personalize the configured username"
+REAL_USER="$(whoami)"
+FLAKE_USER="$(sed -nE 's/^[[:space:]]*user = "([^"]+)";.*/\1/p' "$DIR/flake.nix" | head -n1)"
+if [ -z "$FLAKE_USER" ]; then
+  echo "    Could not find the single \"user = \" line in flake.nix."
+  echo "    Edit flake.nix yourself before continuing."
+  exit 1
+elif [ "$FLAKE_USER" != "$REAL_USER" ]; then
+  echo "    flake.nix is configured for user \"$FLAKE_USER\", but you are \"$REAL_USER\"."
+  read -r -p "    Rewrite flake.nix's \"user = \" line to \"$REAL_USER\"? [y/N] " REPLY
+  if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+    # GNU sed: -i takes no argument, unlike the BSD sed the macOS script uses.
+    sed -i -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
+    echo "    Updated. Review the change with: git diff flake.nix"
+  else
+    echo "    Skipped. Edit the single \"user = \" line in flake.nix yourself before continuing."
+    exit 1
+  fi
+else
+  echo "    flake.nix already matches \"$REAL_USER\", nothing to do."
+fi
+
+echo "==> Step 5: first home-manager switch"
+# home-manager isn't on PATH yet on a fresh machine, so run it straight from
+# the flake this once. After this, rebuild.sh works normally.
+# -b backup renames any file we are about to take over (~/.bashrc, ~/.profile)
+# to <name>.backup instead of aborting the whole activation.
+NIX_BIN="$(command -v nix)"
+"$NIX_BIN" run home-manager/release-26.05 -- \
+  switch --flake ~/.dotfiles#wsl -b backup
+# If this fails with "nix: command not found", open a new shell so the Nix
+# profile is on PATH, then re-run ./bootstrap.sh.
+
+echo "==> Step 6: make zsh the login shell"
+# Ubuntu logs you into bash. macOS already defaults to zsh, so the video never
+# has to do this. The zsh we want is the home-manager one, not an apt one.
+ZSH_BIN="$HOME/.nix-profile/bin/zsh"
+if [ ! -x "$ZSH_BIN" ]; then
+  echo "    $ZSH_BIN not found, skipping. Re-run after a successful switch."
+elif [ "${SHELL:-}" = "$ZSH_BIN" ]; then
+  echo "    already the login shell, nothing to do"
+else
+  # chsh refuses any shell that is not listed in /etc/shells.
+  if ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
+    echo "    registering $ZSH_BIN in /etc/shells (needs sudo)"
+    echo "$ZSH_BIN" | sudo tee -a /etc/shells >/dev/null
+  fi
+  chsh -s "$ZSH_BIN" || {
+    echo "    chsh failed. Fallback: add this to the end of ~/.bashrc"
+    echo "        exec $ZSH_BIN -l"
+  }
+fi
+
+cat <<'NEXT'
+
+==> WSL side done.
+
+Two things still live on Windows, because they are Windows programs:
+WezTerm (the terminal that draws the pixels) and the font it renders with.
+
+From a Windows PowerShell window, in this repo's windows/ folder:
+
+    powershell -ExecutionPolicy Bypass -File .\setup-windows.ps1
+    powershell -ExecutionPolicy Bypass -File .\settings.ps1     # optional
+
+The repo is reachable from Windows at:
+    \\wsl.localhost\<your-distro>\home\<your-user>\.dotfiles\windows
+
+Then launch WezTerm. It opens straight into this WSL distro.
+From then on, ./rebuild.sh is all you need for Linux-side changes.
+NEXT

@@ -1,0 +1,18 @@
+# herdr runtime artifacts (regenerated at runtime; never commit)
+# The config dir is a live symlink into this repo, so herdr's own state
+# would otherwise show up in git status.
+home/.config/herdr/*.log
+home/.config/herdr/session.json
+home/.config/herdr/*.sock
+
+# nix build output
+result
+result-*
+
+# Windows noise, since this tree is reachable from Explorer over \\wsl.localhost
+Thumbs.db
+desktop.ini
+*.backup
+
+# neovim plugin state. Delete this line if you want plugin versions pinned.
+home/.config/nvim/lazy-lock.json
