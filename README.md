@@ -10,9 +10,9 @@ home-manager**, and keeps the video's actual promise intact: one command,
 `./rebuild.sh`, reproduces the whole thing.
 
 You get what the video produces: Nix-managed packages, zsh with autosuggestions
-and syntax highlighting, Starship, a rose-pine terminal in Hack Nerd Font, a
-modular Neovim config, the herdr agent multiplexer, and one global `AGENTS.md`
-shared by every coding agent.
+and syntax highlighting, Starship, Hack Nerd Font installed on the Windows side
+straight from the Nix store, a modular rose-pine Neovim config, the herdr agent
+multiplexer, and one global `AGENTS.md` shared by every coding agent.
 
 ---
 
@@ -59,17 +59,15 @@ flowchart TB
             NVIM["nvim/"]
             HCFG["herdr/config.toml"]
             AG["AGENTS.md"]
-            WTC["windows-terminal/<br/>scheme + profile"]
         end
-        SYNC["scripts/<br/>sync-windows-terminal.sh"]
+        SYNC["scripts/<br/>install-windows-font.sh"]
     end
 
     HM -->|builds| BIN
     HM -->|builds| HERDR
     HM -->|mkOutOfStoreSymlink| CFG
     HM -->|"nerd-fonts.hack"| SYNC
-    WTC --> SYNC
-    SYNC -->|"jq merge, reg.exe"| WT
+    SYNC -->|"reg.exe"| WT
     SYNC --> FONT
     WT ==>|attaches to| HERDR
     HERDR --> BIN
@@ -139,9 +137,13 @@ That is the whole install. There is no second step on the Windows side.
 
 The first build downloads a lot. That is normal and happens once.
 
-Then open Windows Terminal: the Ubuntu profile is now the default, themed
-rose-pine, in Hack Nerd Font. If glyphs look wrong, sign out of Windows and back
-in once so it picks up the newly registered font.
+Then open Windows Terminal and set your WSL profile's font face to `Hack Nerd
+Font`. If glyphs look wrong, sign out of Windows and back in once so it picks up
+the newly registered font.
+
+Colours, transparency and padding are yours to set in Windows Terminal's own
+Settings UI - this repo deliberately does not write that file. See
+[docs/05](docs/05-terminal.md).
 
 ## Daily use
 
@@ -164,8 +166,8 @@ add it to `home.packages` in `home.nix`, run `./rebuild.sh`.
 **Add a shell alias.** `programs.zsh.shellAliases` in `home.nix`, then rebuild.
 
 **Change the terminal font size or colours.** Edit
-`home/windows-terminal/profile.json` or `rose-pine-moon.json`, then
-`./rebuild.sh` (or just `./scripts/sync-windows-terminal.sh`).
+Windows Terminal's own Settings UI. This repo does not manage colours,
+opacity or padding - only the font. See [docs/05](docs/05-terminal.md).
 
 **Add a Neovim plugin.** Drop a file in `home/.config/nvim/lua/plugins/`.
 lazy.nvim loads every file in that directory. No rebuild.
@@ -189,10 +191,9 @@ dotfiles-wsl/
 ├── bootstrap.sh                    # one-time setup, end to end
 ├── rebuild.sh                      # the everyday command
 ├── scripts/
-│   └── sync-windows-terminal.sh    # the only thing that crosses to Windows
+│   └── install-windows-font.sh    # the only thing that crosses to Windows
 ├── home/                           # live-symlinked into $HOME
 │   ├── AGENTS.md                   # global agent memory, shared by all agents
-│   ├── windows-terminal/           # colour scheme + profile, pushed to Windows
 │   └── .config/
 │       ├── herdr/config.toml
 │       └── nvim/
@@ -239,7 +240,7 @@ the video. Commit `home/.config/nvim/lazy-lock.json` if you want them locked.
 | [06 - Neovim](docs/06-neovim.md) | Every Lua file, including the clipboard bridge |
 | [07 - herdr](docs/07-herdr.md) | Keybindings and running agents in panes |
 | [08 - Agents](docs/08-agents.md) | `AGENTS.md` fan-out, and what this repo refuses to manage |
-| [09 - The Windows bridge](docs/09-windows-bridge.md) | `sync-windows-terminal.sh`, line by line |
+| [09 - The Windows bridge](docs/09-windows-bridge.md) | `install-windows-font.sh`, line by line |
 | [10 - Troubleshooting](docs/10-troubleshooting.md) | WSL-specific failure modes |
 
 ## Credit

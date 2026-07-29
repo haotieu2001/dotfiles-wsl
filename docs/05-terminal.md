@@ -34,121 +34,75 @@ its large config surface are redundant here. What is actually needed from the
 host terminal is narrow: fast, correct VT rendering, truecolor, and a Nerd
 Font. Windows Terminal does all of that.
 
-So the terminal is reduced to two data files in this repo, pushed across the
-boundary by one script, driven from inside WSL:
+## What this repo does and does not touch
+
+Only one thing crosses the boundary:
 
 ```
-home/windows-terminal/rose-pine-moon.json   the colour scheme
-home/windows-terminal/profile.json          font, opacity, padding, cursor
+nerd-fonts.hack  (Nix store, pinned by flake.lock)
         |
-        |  scripts/sync-windows-terminal.sh   (runs inside WSL)
+        |  scripts/install-windows-font.sh   (runs inside WSL)
         v
-Windows Terminal settings.json               merged, never overwritten
+%LOCALAPPDATA%\Microsoft\Windows\Fonts  + HKCU registration
 ```
 
-No PowerShell step, no admin rights, no UNC stub, and `./rebuild.sh` still does
-everything in one command.
+**Colours, opacity, padding, background image and font size are deliberately
+left alone.** An earlier version of this port did merge a scheme and profile
+settings into `settings.json` on every rebuild. That was a mistake, and it is
+worth being precise about why, because the reasoning generalises:
 
-## `home/windows-terminal/rose-pine-moon.json`
+- `settings.json` is a file **Windows Terminal itself writes**, every time you
+  change anything in its Settings UI. A repo that reasserts its own values on
+  every `./rebuild.sh` is in a fight with the application for ownership of the
+  file, and the user loses whichever one ran last.
+- Every value in it is **taste**, not correctness. A colour scheme is not a
+  dependency to be pinned; it is a preference that the person looking at the
+  screen is the authority on.
+- Adopting this repo should not silently replace a theme you already had.
 
-A standard Windows Terminal colour scheme. `name` is the identifier the profile
-refers to; changing it means changing `colorScheme` in `profile.json` too.
+This is the same rule that keeps `~/.claude` out of `home.nix`
+(see [08-agents.md](08-agents.md)): **only manage what this repo owns
+outright, and where nothing else writes.** The font is exactly that - it has a
+correct answer (the glyphs must exist, at a version matching the rest of the
+build), and nothing else on the machine manages it.
+
+## Setting your own colours
+
+Windows Terminal Settings UI, or edit `settings.json` directly. A scheme is an
+object under `schemes`, referenced by name from either `profiles.defaults` or an
+individual profile:
 
 ```json
 {
-  "name": "Rose Pine Moon",
-  "background": "#232136",
-  "foreground": "#E0DEF4",
-  "cursorColor": "#56526E",
-  "selectionBackground": "#44415A",
+  "schemes": [ { "name": "my-theme", "background": "#050008", "...": "..." } ],
+  "profiles": { "defaults": { "colorScheme": "my-theme", "opacity": 80 } }
+}
 ```
 
-`#232136` is rose-pine moon's `base` and `#E0DEF4` its `text`. The cursor uses
-`highlightHigh` and the selection `highlightMed`, so both read clearly against
-the background without competing with the syntax colours.
+Put it in `profiles.defaults` to apply it to every profile, or on one profile to
+scope it. Transparency is `opacity` (0-100); add `"useAcrylic": true` for a
+blurred backdrop instead of plain see-through. That pair is the Windows Terminal
+equivalent of the video's `window_background_opacity` and
+`macos_window_background_blur` at 17:12.
 
-```json
-  "black": "#393552",
-  "red": "#EB6F92",
-  "green": "#3E8FB0",
-  "yellow": "#F6C177",
-  "blue": "#9CCFD8",
-  "purple": "#C4A7E7",
-  "cyan": "#EA9A97",
-  "white": "#E0DEF4",
-```
+For the transparency to be visible behind the editor, Neovim must not paint an
+opaque background - see the `transparency` flag in [06-neovim.md](06-neovim.md).
 
-The sixteen ANSI slots, using rose-pine's canonical mapping: `love` is red,
-`pine` is green, `gold` is yellow, `foam` is blue, `iris` is purple and `rose`
-is cyan. The names are a historical accident of the ANSI palette; what matters
-is that this is the mapping the rose-pine Neovim theme expects, so the editor
-and everything else in the terminal agree.
+Two settings worth knowing about:
 
-The bright variants repeat the same values, which is deliberate. rose-pine is a
-low-contrast palette, and inventing brighter variants would break its balance.
-
-## `home/windows-terminal/profile.json`
-
-Merged onto the WSL profile only. Every key not listed here is left as
-Windows Terminal had it.
-
-```json
-  "colorScheme": "Rose Pine Moon",
-  "font": { "face": "Hack Nerd Font", "size": 11 },
-```
-
-`face` must match the name the font registered under on Windows. The sync
-script registers exactly `Hack Nerd Font`.
-
-Size 11 is the Windows equivalent of the video's macOS `15.0`, which is a
-Retina value. Adjust freely.
-
-```json
-  "opacity": 90,
-  "useAcrylic": true,
-```
-
-The translucent frosted background from 17:12. On Windows Terminal, `opacity`
-is 0-100 and `useAcrylic` selects the blurred backdrop rather than plain
-transparency. This replaces the video's `window_background_opacity` plus
-`macos_window_background_blur`.
-
-For the blur to be visible behind the editor, Neovim must not paint an opaque
-background - see the `transparency` flag in [06-neovim.md](06-neovim.md).
-
-```json
-  "padding": "12",
-  "antialiasingMode": "grayscale",
-  "cursorShape": "filledBox",
-  "scrollbarState": "hidden",
-```
-
-`grayscale` antialiasing renders noticeably better than the default ClearType
-subpixel rendering on a dark background. `scrollbarState: hidden` gets close to
-the frameless look from 17:20; Windows Terminal has no equivalent of removing
-the title bar per-profile, so that is one cosmetic detail the port does not
-reproduce.
-
-```json
-  "snapOnInput": true,
-  "historySize": 20000
-```
-
-`snapOnInput` jumps back to the prompt when you type after scrolling. The large
-scrollback matters when reading agent output.
-
-Note there is no `startingDirectory`. Setting it is tempting but fragile: its
-interpretation differs between WSL and Windows profiles. The zsh guard in
-`home.nix` handles the real problem instead, bouncing to `$HOME` if the shell
-starts anywhere under `/mnt`.
+- `"antialiasingMode": "grayscale"` renders noticeably better than the default
+  ClearType subpixel rendering on a dark background.
+- There is no `startingDirectory` here on purpose: its interpretation differs
+  between WSL and Windows profiles. The zsh guard in `home.nix` solves the real
+  problem instead, bouncing to `$HOME` if the shell starts under `/mnt`.
 
 ## Using a different terminal
 
 Nothing else in this repo depends on Windows Terminal. If you prefer Alacritty,
-Ghostty, or WezTerm from its nightly channel, install it yourself and skip the
-sync script; the WSL side is unaffected. You need exactly two things from any
-host terminal: Hack Nerd Font (still installed by the sync script) and
-truecolor support.
+Ghostty, or WezTerm from its nightly channel, install it yourself; the WSL side
+is unaffected, and the font script still works since it only installs a font.
+You need exactly two things from any host terminal: Hack Nerd Font and truecolor
+support.
 
 For a fully Nix-managed terminal with no Windows-side step at all, add
 `wezterm` or `kitty` to `home.packages` and run it as a Linux GUI app through
@@ -161,7 +115,7 @@ inconsistent GPU acceleration. Worth it if reproducibility is the priority.
 | Symptom | Fix |
 | --- | --- |
 | Boxes instead of icons | Font registered but not yet picked up. Sign out of Windows and back in. |
-| Colours unchanged | The profile name did not match. See [09-windows-bridge.md](09-windows-bridge.md). |
-| Background opaque | `useAcrylic` needs `opacity` below 100; also check Neovim's `transparency`. |
+| Font not offered in Settings | The install script has not run, or ran before `nerd-fonts.hack` was in `home.packages`. Run `./scripts/install-windows-font.sh`. |
+| Background opaque | `opacity` must be below 100; also check Neovim's `transparency`. |
 | Opens in `/mnt/c/...` | The zsh guard in `home.nix` handles this; make sure you are on zsh. |
-| Want your old settings back | `settings.json.dotfiles-backup`, next to the file the script edits. |
+| Colours changed unexpectedly | Not this repo - nothing here writes `settings.json`. Check Windows Terminal's own Settings UI. |

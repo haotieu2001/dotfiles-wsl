@@ -43,8 +43,8 @@ That splits the video's setup across a boundary:
 
 | Component | Runs where | Installed by |
 | --- | --- | --- |
-| Windows Terminal | Windows | ships with Windows; themed by the sync script |
-| Hack Nerd Font | Windows (and Linux) | `home.nix` (Nix store), copied across by the sync script |
+| Windows Terminal | Windows | ships with Windows; its settings stay yours |
+| Hack Nerd Font | Windows (and Linux) | `home.nix` (Nix store), copied across by `install-windows-font.sh` |
 | zsh, Starship | WSL | `home.nix` |
 | Neovim, ripgrep, fd, fzf, jq, lazygit | WSL | `home.nix` |
 | herdr | WSL | `modules/herdr.nix` |

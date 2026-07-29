@@ -172,7 +172,7 @@ sudo awk '!seen[$0]++' /etc/shells.bak | sudo tee /etc/shells >/dev/null
 ### Prompt shows boxes or missing glyphs
 
 Starship's symbols need a Nerd Font **on Windows**. Run
-`./scripts/sync-windows-terminal.sh`, then sign out of Windows and back in;
+`./scripts/install-windows-font.sh`, then sign out of Windows and back in;
 newly registered fonts are often invisible to already-running processes.
 
 ## Terminal
@@ -182,7 +182,7 @@ newly registered fonts are often invisible to already-running processes.
 Run the sync by hand and read what it says:
 
 ```bash
-./scripts/sync-windows-terminal.sh
+./scripts/install-windows-font.sh
 ```
 
 `no Windows Terminal profile named '<distro>' yet` means Windows Terminal has
@@ -212,7 +212,7 @@ reg.exe query 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts' | grep -
 
 ### Background is opaque
 
-`useAcrylic` needs `opacity` below 100 in `home/windows-terminal/profile.json`.
+`opacity` must be below 100, set in Windows Terminal's own settings. This repo does not manage it.
 If the terminal is translucent but Neovim is not, the colourscheme
 `transparency` flag is false - see [06-neovim.md](06-neovim.md).
 

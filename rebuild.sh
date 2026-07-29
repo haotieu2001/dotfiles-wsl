@@ -16,4 +16,4 @@ home-manager switch --flake ~/.dotfiles#wsl -b backup
 
 # Push the terminal font + colours to the Windows side. Cheap and idempotent,
 # so it runs every time and cannot drift from what is committed here.
-exec "$DIR/scripts/sync-windows-terminal.sh"
+exec "$DIR/scripts/install-windows-font.sh"

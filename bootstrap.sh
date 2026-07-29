@@ -152,15 +152,18 @@ fi
 echo "==> Step 7: Windows Terminal"
 # Everything below this point is driven from inside WSL through Windows
 # interop, so there is no separate PowerShell step to run.
-"$DIR/scripts/sync-windows-terminal.sh" || \
-  echo "    Terminal sync failed; run ./scripts/sync-windows-terminal.sh later."
+"$DIR/scripts/install-windows-font.sh" || \
+  echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 
 cat <<'NEXT'
 
 ==> Done.
 
-Open Windows Terminal. The Ubuntu profile is now the default, themed
-rose-pine, in Hack Nerd Font.
+Open Windows Terminal. Hack Nerd Font is now installed - set it as the
+font face for your WSL profile if it is not already.
+
+Colours and transparency are left to you; this repo does not touch
+Windows Terminal's settings.
 
 If you were already in a shell, start a new one so zsh and the Nix
 profile are picked up.

@@ -73,8 +73,8 @@ here instead, with one deliberate exception: `claude-code`. It ships a
 self-updater, and a read-only Nix store is the wrong home for anything that
 updates itself - see [08-agents.md](08-agents.md).
 
-`jq` earns its place independently: `scripts/sync-windows-terminal.sh` uses it
-to merge into the Windows Terminal settings file.
+`jq` is here simply because it is the standard way to handle JSON on the
+command line, not because anything in this repo requires it.
 
 `git` is listed even though `bootstrap.sh` requires git to clone the repo. That
 bootstrap git comes from apt; this one is Nix-managed and pinned, and takes
@@ -91,7 +91,7 @@ under WSLg, but **not** the terminal you actually look at, which is a Windows
 process reading the Windows font store.
 
 `nerd-fonts.hack` is nonetheless in `home.packages`, and it is the single source
-for both sides: `scripts/sync-windows-terminal.sh` copies these exact files out
+for both sides: `scripts/install-windows-font.sh` copies these exact files out
 of the Nix store into the Windows font directory. So the font version is pinned
 by `flake.lock` like everything else, rather than by a download URL. See
 [09-windows-bridge.md](09-windows-bridge.md).
@@ -247,8 +247,8 @@ a store symlink. Only symlink files this repo is the sole author of.
 
 The deliberate omission. The terminal is a Windows process and cannot read Linux
 dotfiles at all, so a symlink would achieve nothing. Its settings live in
-`home/windows-terminal/` and are pushed across the boundary by the sync script
-instead. See [05-terminal.md](05-terminal.md).
+its own Settings UI, and this repo deliberately does not write them. Only the
+font crosses the boundary. See [05-terminal.md](05-terminal.md).
 
 ```nix
   home.file.".codex/AGENTS.md".source = ... "${dotfiles}/home/AGENTS.md";

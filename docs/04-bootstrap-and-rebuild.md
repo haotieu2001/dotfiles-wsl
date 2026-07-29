@@ -12,7 +12,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ln -sfn "$DIR" ~/.dotfiles
 home-manager switch --flake ~/.dotfiles#wsl -b backup
-exec "$DIR/scripts/sync-windows-terminal.sh"
+exec "$DIR/scripts/install-windows-font.sh"
 ```
 
 The sync runs after every switch. It is cheap and idempotent, so the terminal
@@ -28,7 +28,7 @@ theme cannot drift from what is committed in the repo.
   replace an existing link, `-n` treat an existing link to a directory as a file
   to replace rather than descending into it. Without `-n` you would eventually
   create `~/.dotfiles/dotfiles-wsl`.
-- `exec` on the final line - replace the shell with the sync script instead of
+- `exec` on the final line - replace the shell with the font script instead of
   forking, so its exit code becomes the script's directly.
 - `--flake ~/.dotfiles#wsl` - build the `homeConfigurations."wsl"` output.
 - `-b backup` - if activation is about to overwrite a file it does not manage
@@ -184,8 +184,8 @@ macOS already uses zsh, so the video has no equivalent step.
 ### Step 7 - Windows Terminal
 
 ```bash
-"$DIR/scripts/sync-windows-terminal.sh" || \
-  echo "    Terminal sync failed; run ./scripts/sync-windows-terminal.sh later."
+"$DIR/scripts/install-windows-font.sh" || \
+  echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 ```
 
 Pushes the font and terminal theme across to Windows. There is no separate

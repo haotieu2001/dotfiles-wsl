@@ -17,13 +17,13 @@ in
   # On WSL there is no Homebrew: everything that runs inside Linux comes from
   # nixpkgs. The one thing that must render on the Windows side is the font,
   # which is still sourced from here and pushed across the boundary by
-  # scripts/sync-windows-terminal.sh.
+  # scripts/install-windows-font.sh.
   home.packages = with pkgs; [
     # cli i use constantly
     ripgrep   # fast search
     fd        # fast find
     fzf       # fuzzy finder
-    jq        # json on the command line, also used by the claude status line
+    jq        # json on the command line
     lazygit
     neovim
     git
@@ -36,14 +36,14 @@ in
     # update themselves are a bad fit for a read-only store.
 
     # The terminal font. Pinned here by flake.lock, then copied across the
-    # WSL/Windows boundary by scripts/sync-windows-terminal.sh, because the
+    # WSL/Windows boundary by scripts/install-windows-font.sh, because the
     # Windows font renderer cannot see Linux fontconfig.
     nerd-fonts.hack
   ];
 
   # Registers the font with Linux fontconfig. The Windows terminal that
   # actually draws your glyphs cannot see this, so the same Nix-store font
-  # files are copied to the Windows font directory by the sync script.
+  # files are copied to the Windows font directory by the install script.
   fonts.fontconfig.enable = true;
 
   home.sessionVariables = {
@@ -106,9 +106,10 @@ in
   # replacing them with store symlinks silently displaces whatever was already
   # there. Only symlink files this repo is the sole author of.
 
-  # No terminal-emulator config is symlinked here. The terminal is a Windows
-  # process and cannot read Linux dotfiles, so its settings are pushed across
-  # the boundary from home/windows-terminal/ instead. See docs/05-terminal.md.
+  # No terminal config is managed here either. The terminal is a Windows
+  # process that cannot read Linux dotfiles, and its settings.json is edited
+  # through its own UI - every value in it is a matter of taste. Only the font
+  # crosses the boundary. See docs/05-terminal.md.
 
   home.file.".codex/AGENTS.md".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";
