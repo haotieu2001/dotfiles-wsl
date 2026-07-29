@@ -1,38 +1,36 @@
-# 11 - Devshells
+# 11 - Tools per project
 
-Per-project toolchains, so a project's Python version lives in the project
-instead of on the laptop.
+Keeping a project's Python version inside the project, instead of on the laptop.
 
-## The problem this solves
+## The problem
 
-`home.nix` reproduces `$HOME` perfectly. It says nothing about your projects,
-and that gap is where environments rot:
+`home.nix` rebuilds your home folder perfectly. It says nothing about your
+projects, and that gap is where things go wrong:
 
-- Node comes from nvm, so a new machine has no Node until you remember to
+- Node comes from nvm, so a new computer has no Node until you remember to
   install nvm and then the right version.
-- Ubuntu's `python3` has no `pip`, so you bootstrap one with
-  `--break-system-packages`, and now every project shares one mutable
-  `~/.local` full of packages you cannot attribute to anything.
-- Two projects want different Python versions and a version manager has to
-  arbitrate.
+- Ubuntu's `python3` has no `pip`, so you add one with
+  `--break-system-packages`. Now every project shares one folder full of
+  packages, and you cannot tell which project needs which.
+- Two projects want different Python versions, and something has to choose.
 
-None of that is reproducible, and none of it is in git. A project should carry
-its own toolchain the same way it carries its own lockfile.
+None of that is written down anywhere, and none of it is in git. A project
+should carry its own tools, the same way it carries its own lock file.
 
-## The shape
+## How it looks
 
 ```mermaid
 flowchart LR
-    HN["home.nix<br/>global $HOME"] --> T["git, nvim, ripgrep,<br/>node 24, uv, direnv"]
+    HN["home.nix<br/>shared home folder"] --> T["git, nvim, ripgrep,<br/>node 24, uv, direnv"]
     P1["~/api/flake.nix"] --> S1["python 3.12<br/>+ uv + ruff"]
     P2["~/web/flake.nix"] --> S2["node 20<br/>+ pnpm"]
-    CD["cd into a project"] -.->|direnv| S1
+    CD["walk into a project"] -.->|direnv| S1
     CD -.->|direnv| S2
 ```
 
-`home.nix` gives you the tools you want everywhere. Each project's `flake.nix`
-gives you the versions that project needs, pinned in its own `flake.lock` and
-committed alongside the code.
+`home.nix` gives you tools you want everywhere. Each project's `flake.nix` gives
+you the versions that project needs, written down in its own `flake.lock` and
+saved next to the code.
 
 ## Setting up a project
 
@@ -42,12 +40,13 @@ nix flake init -t ~/.dotfiles#python     # or #node
 direnv allow
 ```
 
-`nix flake init -t` copies a starting point out of `templates/` in this repo:
-a `flake.nix` and a one-line `.envrc`. `direnv allow` is a per-directory trust
-prompt - direnv refuses to run an `.envrc` until you approve it, and re-asks
-whenever the file changes.
+`nix flake init -t` copies a starting point out of `templates/` in this repo: a
+`flake.nix` and a one-line `.envrc`.
 
-From then on:
+`direnv allow` gives permission for this one folder. direnv refuses to run an
+`.envrc` file until you say yes, and it asks again whenever the file changes.
+
+After that:
 
 ```
 $ cd ~/my-api
@@ -59,15 +58,15 @@ Python 3.12.13
 $ cd ..
 direnv: unloading
 $ python --version
-Python 3.14.4           # back to Ubuntu's
+Python 3.14.4          # Ubuntu's own Python again
 ```
 
-Commit `flake.nix`, `flake.lock` and `.envrc`. Anyone who clones the repo and
-has Nix gets the identical toolchain.
+Commit `flake.nix`, `flake.lock` and `.envrc`. Anyone who clones the project and
+has Nix gets exactly the same tools.
 
 ## Why nix-direnv and not plain direnv
 
-`home.nix` enables both:
+`home.nix` turns on both:
 
 ```nix
 programs.direnv = {
@@ -76,29 +75,29 @@ programs.direnv = {
 };
 ```
 
-Plain direnv would re-evaluate the entire flake on every single `cd` into the
-directory, which takes seconds and gets old fast. It also registers no GC root,
-so `nix-collect-garbage` deletes your project toolchain and the next `cd`
-re-downloads it.
+Plain direnv would rebuild the whole flake every single time you walk into the
+folder, which takes seconds and gets annoying fast. It also does not tell Nix
+that these tools are in use, so `nix-collect-garbage` deletes them and the next
+visit downloads everything again.
 
-nix-direnv caches the evaluated environment and pins it with a GC root under
-`.direnv/`. First entry is slow, every later one is instant, and garbage
-collection leaves it alone.
+nix-direnv remembers the result and marks it as in use, inside `.direnv/`. The
+first visit is slow, every visit after that is instant, and cleaning up never
+removes it.
 
 Add `.direnv/` to the project's `.gitignore`.
 
-## The Nix/language-package-manager split
+## Which tool locks what
 
-The templates deliberately do **not** try to express every PyPI or npm
-dependency in Nix. The split is:
+The templates do **not** try to describe every Python or npm package in Nix.
+The split is:
 
-| Layer | Pinned by | Covers |
+| Layer | Locked by | Covers |
 | --- | --- | --- |
-| Interpreter, compiler, system libs | `flake.lock` | python3.12, node 24, openssl, postgres client |
+| Language, compiler, system libraries | `flake.lock` | python3.12, node 24, openssl, postgres client |
 | Language packages | `uv.lock`, `pnpm-lock.yaml` | requests, fastapi, react |
 
-So the Python template sets `UV_PYTHON` to the Nix-pinned interpreter and lets
-uv build a normal `.venv`:
+So the Python template points `uv` at the Nix-installed Python and lets it build
+a normal `.venv` folder:
 
 ```nix
 shellHook = ''
@@ -107,17 +106,18 @@ shellHook = ''
 '';
 ```
 
-`UV_PYTHON_DOWNLOADS=never` matters: without it uv silently downloads its own
-CPython and the Nix pin becomes decorative.
+`UV_PYTHON_DOWNLOADS=never` matters. Without it, uv quietly downloads its own
+Python and the version you picked in Nix stops meaning anything.
 
-Expressing PyPI in Nix is possible (`poetry2nix`, `uv2nix`) but it is a much
-bigger commitment, and the payoff is small when the interpreter and system
-libraries - the parts that actually break across machines - are already pinned.
+You *can* describe every Python package in Nix, using tools like `poetry2nix` or
+`uv2nix`. It is a much bigger job, and it buys little here, because the parts
+that actually break between computers are the language and the system libraries,
+and those are already locked.
 
 ## Adding a package to a project
 
 Find it on [search.nixos.org](https://search.nixos.org/packages), add it to
-`packages`, save. direnv reloads on the next prompt.
+`packages`, and save. direnv reloads at your next prompt.
 
 ```nix
 packages = with pkgs; [
@@ -129,43 +129,44 @@ packages = with pkgs; [
 ];
 ```
 
-## Updating a project's pins
+## Updating a project's versions
 
 ```bash
-nix flake update          # move to the latest nixpkgs for that branch
-nix flake update nixpkgs  # just that one input
+nix flake update          # move to the newest nixpkgs on that branch
+nix flake update nixpkgs  # update one input only
 ```
 
-This changes only that project. Your dotfiles pins are separate and move only
-when you run `nix flake update` in `~/.dotfiles`. That separation is the point:
-a project's toolchain should not shift because you added a CLI tool to
-`home.nix`.
+This changes that project and nothing else. Your dotfiles versions are separate
+and only move when you run `nix flake update` inside `~/.dotfiles`. That
+separation is the point: adding a tool to `home.nix` must never change a
+project's Python version.
 
-## When a devshell is the wrong tool
+## When this is the wrong tool
 
-**Prebuilt binaries that assume FHS.** Anything expecting `/usr/lib` or a
-dynamic loader at `/lib64/ld-linux-x86-64.so.2` will fail in a Nix shell.
-Wrap it in `pkgs.buildFHSEnv`, or install it with `apt` and accept that it is
-outside the reproducible set.
+**Ready-made programs that expect a normal Linux layout.** Anything looking for
+`/usr/lib`, or a loader at `/lib64/ld-linux-x86-64.so.2`, will fail inside a Nix
+shell. Wrap it with `pkgs.buildFHSEnv`, or install it with `apt` and accept that
+it sits outside the repeatable part.
 
-**CUDA and GPU work.** Doable, but the driver half lives outside Nix and
-`nixpkgs` CUDA packages are large. A container is often less trouble.
+**CUDA and graphics card work.** Possible, but the driver half lives outside Nix
+and the CUDA packages are huge. A container is usually less trouble.
 
-**Throwaway experiments.** You do not need a flake to try one tool:
+**Quick experiments.** You do not need a flake to try one tool:
 
 ```bash
-nix shell nixpkgs#httpie      # in scope until you exit the shell
+nix shell nixpkgs#httpie      # available until you close the shell
 nix run nixpkgs#cowsay -- hi  # run once, install nothing
 ```
 
-## Migrating off the old tools
+## Moving off the old tools
 
-- **nvm**: Node 24 is in `home.nix` now. For a project on a different major,
-  put `nodejs_20` in its flake. `~/.nvm` can go once nothing references it.
-- **`pip --user`**: anything in `~/.local/bin` backed by `#!/usr/bin/python3`
-  is a global install. Move it into the project that needs it, or install it as
-  an isolated tool with `uv tool install`.
-- **conda / pyenv**: replaced entirely by a per-project `python3xx` in the flake.
+- **nvm**: Node 24 is in `home.nix` now. If a project needs a different major
+  version, put `nodejs_20` in its flake. You can delete `~/.nvm` once nothing
+  uses it.
+- **`pip --user`**: anything in `~/.local/bin` starting with `#!/usr/bin/python3`
+  is a shared install. Move it into the project that needs it, or install it on
+  its own with `uv tool install`.
+- **conda and pyenv**: replaced by putting `python3xx` in each project's flake.
 
-There is no rush. The old tools keep working; the difference is that only the
-flake-based ones survive a new laptop.
+There is no rush. The old tools keep working. The difference is that only the
+flake ones survive a new laptop.
