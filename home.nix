@@ -28,7 +28,20 @@ in
     neovim
     git
 
-    herdr     # agent multiplexer (was `brews = [ "herdr" ]` on macOS)
+    herdr     # agent multiplexer
+
+    # Language toolchains that used to be installed by hand: node came from
+    # nvm, uv from a curl'd binary in ~/.local/bin. Neither survived a new
+    # machine, which defeated the point of the repo. These are the versions
+    # that should exist on *every* machine; per-project versions belong in
+    # that project's own flake instead. See docs/11-devshells.md.
+    nodejs_24
+    uv
+
+    # Loads a project's devShell on `cd` and unloads it on the way out.
+    # Pointless without the programs.direnv block further down, which is what
+    # actually hooks it into zsh.
+    direnv
 
     # claude-code is deliberately NOT here. It ships a self-updater that keeps
     # itself current in ~/.local/bin; pinning it in the Nix store freezes it at
@@ -93,6 +106,20 @@ in
       };
       cmd_duration.format = "[$duration]($style) ";
     };
+  };
+
+  # Per-project toolchains. `cd` into a directory with a flake.nix and an
+  # .envrc, and that project's compiler, runtime and tools appear on PATH; `cd`
+  # out and they are gone. This is what replaces nvm, pyenv, and installing
+  # things globally with `pip --user`.
+  #
+  # nix-direnv makes it usable day to day: plain direnv re-evaluates the whole
+  # flake on every `cd`, which takes seconds, and keeps no GC root so your
+  # toolchain gets garbage-collected out from under you. nix-direnv caches the
+  # result and pins it. See docs/11-devshells.md.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
   };
 
   # Edit-in-place: the real file stays in my repo, ~/.config just points at it.

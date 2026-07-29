@@ -19,3 +19,6 @@ home/.config/nvim/lazy-lock.json
 
 # guard: a mis-resolved Windows home would write here
 AppData/
+
+# agent worktrees
+.claude/worktrees/

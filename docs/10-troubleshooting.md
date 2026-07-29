@@ -177,29 +177,67 @@ newly registered fonts are often invisible to already-running processes.
 
 ## Terminal
 
-### Colours or font did not change
+### The font did not change
 
-Run the sync by hand and read what it says:
+Run the font script by hand and read what it says:
 
 ```bash
 ./scripts/install-windows-font.sh
 ```
 
-`no Windows Terminal profile named '<distro>' yet` means Windows Terminal has
-never generated a profile for this distro. Open it once, then re-run.
+Then restart Windows Terminal. This script runs on every `./rebuild.sh`, so if
+the font is wrong, something it printed will say why.
 
-`settings.json is not valid JSON (comments?)` means the script refused to touch
-your config rather than risk corrupting it. Open Windows Terminal, change any
-setting so it rewrites the file as plain JSON, then re-run.
+### The colour scheme was never applied
+
+The theme is seeded **once, by `bootstrap.sh` step 8**, not by `rebuild.sh`.
+Run it by hand:
+
+```bash
+./scripts/apply-windows-terminal-theme.sh
+```
+
+Three messages it may print, all of them deliberate:
+
+- `Windows Terminal settings.json not found` - the terminal has never been
+  launched, so it has not written a config. Launch it once, then re-run.
+- `settings.json is not strict JSON` - your file has comments or trailing
+  commas, which Windows Terminal accepts and `jq` does not. Remove them, or
+  apply `windows/blackpanther.json` by hand through the Settings UI.
+- `theme already present; leaving your terminal settings alone` - working as
+  intended. Use `--force` if you really want to overwrite your current look
+  with the committed one.
+
+### I changed the terminal and a rebuild reverted it
+
+It did not. `rebuild.sh` never writes `settings.json` - only `bootstrap.sh` does,
+once. If your colours changed, either someone ran
+`apply-windows-terminal-theme.sh --force`, or Windows Terminal's own settings
+were edited. See [05-terminal.md](05-terminal.md).
 
 ### I want my old terminal settings back
 
+The theme script backs up `settings.json` before its single write:
+
 ```
-<Windows profile>\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json.dotfiles-backup
+<Windows profile>\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\
+    settings.json.pre-dotfiles-wsl.<timestamp>
 ```
 
-Written before any change. The sync only ever adds its own scheme and patches
-the one WSL profile, so unrelated profiles and schemes are already preserved.
+The merge is additive anyway - other schemes, `profiles.list`, `actions` and
+`keybindings` are never touched - so in most cases only `profiles.defaults` and
+the added scheme differ.
+
+### The background image is missing
+
+The image is copied out of the repo to
+`%LOCALAPPDATA%\dotfiles-wsl\blackpanther.jpg` at seed time, because Windows
+Terminal reads `\\wsl.localhost` paths slowly and they break if the distro is
+renamed. If the file is gone, re-seed:
+
+```bash
+./scripts/apply-windows-terminal-theme.sh --force
+```
 
 ### Boxes instead of glyphs
 
@@ -212,14 +250,59 @@ reg.exe query 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts' | grep -
 
 ### Background is opaque
 
-`opacity` must be below 100, set in Windows Terminal's own settings. This repo does not manage it.
-If the terminal is translucent but Neovim is not, the colourscheme
-`transparency` flag is false - see [06-neovim.md](06-neovim.md).
+`opacity` must be below 100. The seeded defaults set it to 80; if you changed it
+later, it is in Windows Terminal's own settings. If the terminal is translucent
+but Neovim is not, the colourscheme `transparency` flag is false - see
+[06-neovim.md](06-neovim.md).
 
 ### Starts in /mnt/c/...
 
 The zsh guard in `home.nix` bounces you to `$HOME`. If it is not firing, you are
 probably still on bash; finish the `chsh` step.
+
+## Devshells
+
+### `direnv: command not found`
+
+`direnv` is in `home.packages` and hooked into zsh by `programs.direnv`. Run
+`./rebuild.sh` and open a new shell - the hook is written into the generated
+`.zshrc`, which an already-running shell has not re-read.
+
+### Nothing happens when I cd into the project
+
+direnv refuses to run an `.envrc` it has not been told to trust:
+
+```bash
+direnv allow
+```
+
+It re-asks whenever the file changes. If you still see nothing, check the
+directory actually has both `.envrc` and `flake.nix`.
+
+### Entering the directory is slow every time
+
+`nix-direnv.enable` is what caches the evaluated environment; without it plain
+direnv re-evaluates the whole flake on every `cd`. Confirm it is set in
+`home.nix`, rebuild, then `direnv reload`.
+
+### My project toolchain disappeared after garbage collection
+
+nix-direnv keeps a GC root under the project's `.direnv/`. If that directory was
+deleted, `nix-collect-garbage` had nothing to protect the toolchain with.
+`direnv reload` rebuilds it.
+
+### `uv` downloaded its own Python instead of using the pinned one
+
+The template sets `UV_PYTHON_DOWNLOADS=never` precisely to stop this. If you
+removed it, or overrode `UV_PYTHON`, uv falls back to fetching its own CPython
+and the Nix pin becomes decorative. See [11-devshells.md](11-devshells.md).
+
+### A prebuilt binary fails with "no such file or directory" but the file exists
+
+Classic FHS problem: the binary wants a dynamic loader at
+`/lib64/ld-linux-x86-64.so.2`, which does not exist on a Nix-managed path. Wrap
+it in `pkgs.buildFHSEnv`, or install it with `apt` and accept it is outside the
+reproducible set.
 
 ## Neovim
 
@@ -253,7 +336,7 @@ content. Installing `win32yank` is the usual alternative if it bothers you.
 
 ### `gd` does nothing
 
-No LSP server is configured. This matches the video, which leaves LSP out.
+No LSP server is configured; this config deliberately leaves LSP out.
 
 ### Plugins did not install
 

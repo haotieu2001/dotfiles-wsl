@@ -1,7 +1,7 @@
 # 02 - `home.nix`
 
-This file is the whole environment. On macOS the video splits its config between
-`configuration.nix` (system level, via nix-darwin) and `home.nix` (user level).
+This file is the whole environment. A NixOS or nix-darwin setup splits its
+config between `configuration.nix` (system level) and `home.nix` (user level).
 Here there is no system level, so everything lands in one file.
 
 ## Header
@@ -22,8 +22,7 @@ let
 The stable path every symlink is written against. Note it points at
 `~/.dotfiles`, **not** at wherever you happened to clone the repo. Both
 `bootstrap.sh` and `rebuild.sh` create that symlink before doing anything else.
-This is the same trick the video uses at 02:53: it means you can move or rename
-the clone and nothing breaks.
+It means you can move or rename the clone and nothing breaks.
 
 ```nix
   herdr = pkgs.callPackage ./modules/herdr.nix { };
@@ -57,24 +56,40 @@ version to keep current.
     ripgrep   # fast search
     fd        # fast find
     fzf       # fuzzy finder
-    jq        # json on the command line, also used by the claude status line
+    jq        # json on the command line
     lazygit
     neovim
     git
     herdr
+    nodejs_24
+    uv
+    direnv
     nerd-fonts.hack
   ];
 ```
 
 `with pkgs;` lets you write `ripgrep` instead of `pkgs.ripgrep`.
 
-Everything the video installs through Homebrew that still runs inside Linux is
-here instead, with one deliberate exception: `claude-code`. It ships a
+**What belongs in this list.** Tools you want on *every* machine you own. What
+does not belong: a version of Python or Node that only one project needs. Those
+go in that project's own flake, so the pin travels with the code instead of
+living on one laptop. See [11-devshells.md](11-devshells.md).
+
+`nodejs_24` and `uv` are the general-purpose ones - the versions you want when
+you run `npx` or `uv tool install` outside any project. Before they were here
+they came from nvm and a hand-downloaded binary in `~/.local/bin`, neither of
+which survived a new machine.
+
+`direnv` does nothing useful on its own; the `programs.direnv` block below is
+what hooks it into zsh.
+
+One deliberate exception to "install it with Nix": `claude-code`. It ships a
 self-updater, and a read-only Nix store is the wrong home for anything that
 updates itself - see [08-agents.md](08-agents.md).
 
-`jq` is here simply because it is the standard way to handle JSON on the
-command line, not because anything in this repo requires it.
+`jq` is here because it is the standard way to handle JSON on the command line,
+and because `apply-windows-terminal-theme.sh` uses it to merge the terminal
+theme.
 
 `git` is listed even though `bootstrap.sh` requires git to clone the repo. That
 bootstrap git comes from apt; this one is Nix-managed and pinned, and takes
@@ -104,8 +119,6 @@ by `flake.lock` like everything else, rather than by a download URL. See
   };
 ```
 
-`EDITOR` is straight from the video.
-
 `sessionVariables` are exported by the session init script, so a shell started
 before a rebuild will not see changes. Open a new shell.
 
@@ -128,7 +141,7 @@ switch. Put shell code in `initContent` instead.
 ```
 
 Pasted verbatim into the generated `.zshrc`. `ctrl+f` accepts the ghost-text
-suggestion, exactly as in the video at 14:12.
+suggestion.
 
 ```nix
       case "$PWD" in
@@ -168,12 +181,12 @@ and `tr -d "\r"` strips the CR that Windows appends.
   };
 ```
 
-Straight from the video, plus `e`. Note WSL puts Windows executables on `PATH`,
-so `explorer.exe .` opens the current Linux directory in Windows Explorer
-through the `\\wsl.localhost` bridge.
+Note WSL puts Windows executables on `PATH`, so `explorer.exe .` opens the
+current Linux directory in Windows Explorer through the `\\wsl.localhost`
+bridge.
 
-`cc` and `co` disable the agents' permission prompts. That is what the video
-does, but understand the tradeoff before using them outside a sandbox.
+`cc` and `co` disable the agents' permission prompts. Convenient, but
+understand the tradeoff before using them outside a sandbox.
 
 ## Starship
 
@@ -203,6 +216,37 @@ also what keeps the prompt fast.
 
 The `❯` glyph and any git symbols need a Nerd Font in the terminal, which is why
 the font install is not optional.
+
+## direnv
+
+```nix
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+```
+
+`enable` installs direnv and, more importantly, adds its hook to the generated
+`.zshrc`. That hook is what runs on every prompt to check whether you have
+entered or left a directory with an `.envrc`.
+
+`nix-direnv.enable` swaps direnv's built-in `use flake` for a much better one.
+It matters for two reasons:
+
+- **Speed.** Plain direnv re-evaluates the whole flake on every `cd` into the
+  project, which takes seconds. nix-direnv caches the result, so only the first
+  entry is slow.
+- **Garbage collection.** Plain direnv registers no GC root, so
+  `nix-collect-garbage` happily deletes a toolchain you are still using.
+  nix-direnv pins it under the project's `.direnv/`.
+
+Together with a project `flake.nix`, this is what makes `cd ~/my-api` put that
+project's Python on `PATH` and `cd ..` take it away again. Full walkthrough in
+[11-devshells.md](11-devshells.md).
+
+Nothing happens until a directory has both an `.envrc` and your approval via
+`direnv allow` - direnv refuses to execute an `.envrc` it has not been told to
+trust, and re-asks whenever the file changes.
 
 ## The symlinks
 
@@ -246,9 +290,9 @@ a store symlink. Only symlink files this repo is the sole author of.
 ```
 
 The deliberate omission. The terminal is a Windows process and cannot read Linux
-dotfiles at all, so a symlink would achieve nothing. Its settings live in
-its own Settings UI, and this repo deliberately does not write them. Only the
-font crosses the boundary. See [05-terminal.md](05-terminal.md).
+dotfiles at all, so a symlink would achieve nothing. What crosses the boundary
+instead is pushed by scripts: the font on every rebuild, and the colour scheme
+once at install. See [05-terminal.md](05-terminal.md).
 
 ```nix
   home.file.".codex/AGENTS.md".source = ... "${dotfiles}/home/AGENTS.md";
@@ -258,7 +302,7 @@ font crosses the boundary. See [05-terminal.md](05-terminal.md).
 One file, several link targets. Each agent looks for its memory file in a
 different place and under a different name, so this fans a single source out to
 all of them. Edit `home/AGENTS.md` and every agent picks it up at once, with no
-rebuild. This is the video's 39:36 chapter.
+rebuild.
 
 Claude Code is the exception: it reads `~/.claude/CLAUDE.md`, which is left
 unmanaged for the reason above. Copy the parts you want, or symlink it yourself

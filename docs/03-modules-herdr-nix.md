@@ -1,8 +1,8 @@
 # 03 - `modules/herdr.nix`
 
-herdr is the agent-aware terminal multiplexer from the video's 33:22 chapter.
-The video installs it with `brews = [ "herdr" ]`. There is no Homebrew here and
-herdr is not in nixpkgs, so this file packages the upstream release binary.
+herdr is the agent-aware terminal multiplexer. It is not in nixpkgs, so this
+file packages the upstream release binary rather than reaching for a second
+package manager to install it.
 
 The upstream install path is `curl -fsSL https://herdr.dev/install.sh | sh`,
 which fetches whatever "latest" happens to be at the time. That is the opposite

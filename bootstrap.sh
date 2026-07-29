@@ -109,8 +109,8 @@ done
 # profile is on PATH, then re-run ./bootstrap.sh.
 
 echo "==> Step 6: make zsh the login shell"
-# Ubuntu logs you into bash. macOS already defaults to zsh, so the video never
-# has to do this. The zsh we want is the home-manager one, not an apt one.
+# Ubuntu logs you into bash. The zsh we want is the home-manager one, not an
+# apt one, so that the shell is pinned like everything else.
 ZSH_BIN="$HOME/.nix-profile/bin/zsh"
 if [ ! -x "$ZSH_BIN" ]; then
   echo "    $ZSH_BIN not found, skipping. Re-run after a successful switch."
@@ -149,25 +149,35 @@ BASHRC
   fi
 fi
 
-echo "==> Step 7: Windows Terminal"
+echo "==> Step 7: the font on the Windows side"
 # Everything below this point is driven from inside WSL through Windows
 # interop, so there is no separate PowerShell step to run.
 "$DIR/scripts/install-windows-font.sh" || \
   echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 
+echo "==> Step 8: seed the Windows Terminal theme"
+# Only bootstrap does this, never rebuild.sh. Seeding a fresh machine takes
+# nothing away from you; reasserting the theme on every rebuild would fight
+# Windows Terminal's own Settings UI for ownership of settings.json. The script
+# is a no-op if the scheme is already there, so your terminal stays yours.
+"$DIR/scripts/apply-windows-terminal-theme.sh" || \
+  echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
+
 cat <<'NEXT'
 
 ==> Done.
 
-Open Windows Terminal. Hack Nerd Font is now installed - set it as the
-font face for your WSL profile if it is not already.
+Restart Windows Terminal to pick up the font and colour scheme. If glyphs
+still look wrong afterwards, sign out of Windows and back in once so the
+newly registered font is enumerated.
 
-Colours and transparency are left to you; this repo does not touch
-Windows Terminal's settings.
+The theme was seeded once, just now. From here it is yours: change colours,
+opacity and padding in Windows Terminal's own Settings UI and nothing in
+this repo will overwrite them.
 
 If you were already in a shell, start a new one so zsh and the Nix
 profile are picked up.
 
-From here on, ./rebuild.sh applies every change - packages, shell,
-editor, and the terminal look - in one command.
+From here on, ./rebuild.sh applies every change to packages, shell and
+editor in one command.
 NEXT
