@@ -1,7 +1,8 @@
 # 08 - `AGENTS.md`, and what this repo deliberately does not manage
 
-The video's 39:36 chapter, and the part that carries over to WSL completely
-unchanged, because agent config is just files in `$HOME`.
+One memory file, fanned out to every coding agent. This is the part of the
+setup that is entirely platform-independent, because agent config is just files
+in `$HOME`.
 
 ## `home/AGENTS.md`
 
@@ -55,8 +56,7 @@ follow. Explicit approval first.
 
 ### The WSL section
 
-Added here, not in the video, because these are the mistakes an agent will
-otherwise make on this specific machine:
+These are the mistakes an agent will otherwise make on this specific machine:
 
 ```markdown
 - Keep repositories under the Linux filesystem (~/...), never under /mnt/c.
@@ -77,9 +77,9 @@ reproduces, which is precisely the drift Nix is here to prevent.
 
 ## Why `~/.claude/` is not managed
 
-The video symlinks Claude Code's `settings.json` and `CLAUDE.md` alongside
-everything else. This repo deliberately does not, and the reason generalises
-past Claude Code.
+It would be natural to symlink Claude Code's `settings.json` and `CLAUDE.md`
+alongside everything else. This repo deliberately does not, and the reason
+generalises past Claude Code.
 
 `mkOutOfStoreSymlink` is a *replacement*, not a merge. Point it at a path that
 already has a real file and home-manager moves the original aside and puts a

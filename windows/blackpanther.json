@@ -1,0 +1,23 @@
+{
+  "name": "blackpanther",
+  "background": "#050008",
+  "foreground": "#EDE7FF",
+  "cursorColor": "#FF2BD1",
+  "selectionBackground": "#3A1E63",
+  "black": "#14001F",
+  "brightBlack": "#7A5A9E",
+  "red": "#FF2BD1",
+  "brightRed": "#FF6FE0",
+  "green": "#2FE0C4",
+  "brightGreen": "#6BF5DA",
+  "yellow": "#FFC42E",
+  "brightYellow": "#FFDD6B",
+  "blue": "#4A7BE8",
+  "brightBlue": "#7BA6FF",
+  "purple": "#A855F7",
+  "brightPurple": "#C77DFF",
+  "cyan": "#3FE0E8",
+  "brightCyan": "#7FF2F7",
+  "white": "#E0DAF5",
+  "brightWhite": "#FFFFFF"
+}

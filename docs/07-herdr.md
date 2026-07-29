@@ -1,22 +1,20 @@
 # 07 - herdr
 
-The video's 33:22 chapter. herdr is a terminal multiplexer built for the agent
-era: it gives each agent its own pane and tracks whether that agent is working,
-blocked, or done in a sidebar.
+herdr is a terminal multiplexer built for the agent era: it gives each agent its
+own pane and tracks whether that agent is working, blocked, or done in a
+sidebar.
 
 Two parts: the package ([03-modules-herdr-nix.md](03-modules-herdr-nix.md)) and
 the config below, symlinked live by `home.nix`.
 
 ## Why it fits WSL well
 
-The video mentions herdr may be the only multiplexer that also works on Windows.
-For this setup that matters in a specific way: it runs as a **Linux** process
-inside WSL, so its sessions survive independently of whichever terminal window is
-attached. Close the terminal, reopen it, run `herdr`, and your agents are still
-running exactly where you left them.
+It runs as a **Linux** process inside WSL, so its sessions survive independently
+of whichever terminal window is attached. Close the terminal, reopen it, run
+`herdr`, and your agents are still running exactly where you left them.
 
 It also does the job the terminal emulator would otherwise do. That is why this
-port does not carry over the video's WezTerm config: with herdr providing
+repo carries no terminal-emulator config at all: with herdr providing
 workspaces, tabs, panes and detachable sessions, the host terminal only has to
 be a fast, correct VT renderer. See [05-terminal.md](05-terminal.md).
 

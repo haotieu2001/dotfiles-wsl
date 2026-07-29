@@ -1,24 +1,31 @@
 # 09 - The Windows bridge
 
-One script, `scripts/install-windows-font.sh`, run from inside WSL. It is the
-only thing in this repo that reaches outside the Linux filesystem.
+Two scripts in `scripts/`, both run from inside WSL. They are the only things in
+this repo that reach outside the Linux filesystem.
 
-The earlier version of this port used two PowerShell scripts run separately.
-This replaces both. WSL can call Windows executables and write to the Windows
-filesystem directly, so everything can be driven from the same `./rebuild.sh`
-that manages the rest of the setup.
+| Script | Runs | Writes |
+| --- | --- | --- |
+| `install-windows-font.sh` | every rebuild | the Windows per-user font store + `HKCU` |
+| `apply-windows-terminal-theme.sh` | bootstrap only | Windows Terminal's `settings.json` |
 
-## What it does
+An earlier version of this port used PowerShell scripts run separately. Neither
+of these needs one: WSL can call Windows executables and write to the Windows
+filesystem directly, so both are driven from inside the same bootstrap.
 
-Exactly one thing: copies Hack Nerd Font out of the Nix store into the Windows
-per-user font directory and registers it, so Windows can render it.
+The split in the "Runs" column is the whole design and is argued in
+[05-terminal.md](05-terminal.md). Short version: the font has a correct answer
+and nothing else manages it, so it is re-pushed forever. `settings.json` is
+owned by Windows Terminal, so this repo writes it exactly once, on a machine
+that has nothing to lose.
 
-It used to also merge a colour scheme and profile settings into Windows
-Terminal's `settings.json`. That was removed - see
-[05-terminal.md](05-terminal.md) for why a repo should not be writing a file the
-application itself owns.
+Both are idempotent and safe to run by hand.
 
-Idempotent. Run it as many times as you like.
+---
+
+# `install-windows-font.sh`
+
+Copies Hack Nerd Font out of the Nix store into the Windows per-user font
+directory and registers it, so Windows can render it.
 
 ## Line by line
 
@@ -112,18 +119,101 @@ Copying a font file is not enough; Windows only enumerates it once registered.
 Newly registered fonts are sometimes invisible to already-running processes,
 hence the sign-out hint when something actually changed.
 
+---
+
+# `apply-windows-terminal-theme.sh`
+
+Merges `windows/blackpanther.json` and `windows/profile-defaults.json` into
+Windows Terminal's `settings.json`, and copies the background image to a
+Windows-side path.
+
+It shares the preconditions above - WSL check, interop check, `%USERPROFILE%`
+lookup with the same `wslpath ""` guard - and adds four of its own.
+
+### Finding settings.json
+
+```bash
+"$base/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
+"$base/Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json"
+"$base/Microsoft/Windows Terminal/settings.json"
+```
+
+Three flavours - Store stable, Store preview, unpackaged - each with its own
+location. Stable first, since that is what Windows 11 preinstalls.
+
+If none exists, the script exits **0** with a hint. Windows Terminal has simply
+never been launched, so it has not written a config yet. That is a "come back
+later", not a bootstrap failure.
+
+### The JSONC guard
+
+```bash
+if ! jq empty "$SETTINGS" >/dev/null 2>&1; then ... exit 0; fi
+```
+
+Windows Terminal reads JSONC: comments and trailing commas are legal for it and
+illegal for `jq`. A hand-edited file can therefore be perfectly valid to the
+application and unparseable here. The script refuses to touch a file it cannot
+parse rather than risk mangling it.
+
+### The seed-once guard
+
+```bash
+if [ "$FORCE" -eq 0 ] && jq -e '.schemes // [] | any(.name == "blackpanther")' ...; then
+  info "theme already present; leaving your terminal settings alone"
+  exit 0
+fi
+```
+
+The line that makes the whole design work. Once the scheme is in the file, this
+script never writes again unless you pass `--force`. Re-running `bootstrap.sh`
+on a machine you have since customised cannot revert your colours.
+
+### The merge
+
+```bash
+.schemes = ((.schemes // []) | map(select(.name != $scheme[0].name)) + [$scheme[0]])
+| .profiles.defaults = ((.profiles.defaults // {}) * $defaults)
+```
+
+Both halves are deliberately additive:
+
+- **Schemes**: drop any same-named scheme, then append. A `--force` re-run
+  updates in place instead of accumulating duplicates, and every other scheme
+  you have is preserved.
+- **Defaults**: `*` is jq's recursive merge, so keys this repo does not mention
+  survive. `profiles.list`, `actions` and `keybindings` are never touched at all.
+
+The background image path is substituted at merge time. The committed JSON holds
+a `__BACKGROUND_IMAGE__` placeholder, because a real path contains a Windows
+username that would be wrong on any other machine.
+
+### Write safety
+
+```bash
+cp -f "$SETTINGS" "$BACKUP"          # settings.json.pre-dotfiles-wsl.<timestamp>
+jq ... > "$TMP"
+jq empty "$TMP" || { warn ...; exit 1; }
+cp -f "$TMP" "$SETTINGS"
+```
+
+Backup first, build the new file in a temporary location, validate it parses,
+and only then replace the original. A failed merge cannot leave you with a
+terminal that will not start.
+
+---
+
 ## Reproducibility, honestly
 
 The font is Nix-pinned: same `flake.lock`, same bytes, on any machine. That part
 is a real guarantee.
 
-Everything else about the Windows side is not, and the repo no longer pretends
-otherwise. Windows Terminal is whatever version Windows ships, and its
-`settings.json` is yours. Earlier drafts of this port tried to close that gap by
-merging our own keys into that file on every rebuild, which bought a weaker kind
-of reproducibility - reasserting values, never removing them, and silently
-overwriting whatever the user had chosen.
+The theme is a weaker claim, and worth stating precisely. A fresh machine gets
+your exact colours, font size, opacity and background - which is the point, and
+what a new laptop actually needs. But it is a **seed**, not a sync: change
+something in the Settings UI afterwards and this repo will not know or care.
+Windows Terminal itself is whatever version Windows ships.
 
-The honest boundary turned out to be the more useful one: **pin what has a
-correct answer, leave what is taste to the person looking at the screen.** One
-small script, one clearly-stated job.
+The boundary this settles on: **pin what has a correct answer, seed what is
+taste, then leave it to the person looking at the screen.** Reasserting taste on
+every rebuild is what the earlier version got wrong.

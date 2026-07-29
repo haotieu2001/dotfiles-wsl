@@ -1,28 +1,32 @@
 # dotfiles-wsl
 
-A WSL2 Ubuntu port of the "freshly installed Mac to a full agentic engineering
-setup" configuration from [this video](https://www.youtube.com/watch?v=5N-okeDdIuI)
-([original macOS repo](https://github.com/kunchenguid/dotfiles)).
+A complete WSL2 Ubuntu development environment, declared in Nix and reproduced
+on a new machine with one command.
 
-The video builds its setup on **nix-darwin**, which only exists for macOS. This
-repo rebuilds the same environment on WSL2 Ubuntu using **standalone
-home-manager**, and keeps the video's actual promise intact: one command,
-`./rebuild.sh`, reproduces the whole thing.
+Clone it onto a fresh Windows laptop, run `./bootstrap.sh`, and you get the same
+packages, the same shell, the same editor, the same agent setup and the same
+terminal look you had on the old one.
 
-You get what the video produces: Nix-managed packages, zsh with autosuggestions
-and syntax highlighting, Starship, Hack Nerd Font installed on the Windows side
-straight from the Nix store, a modular rose-pine Neovim config, the herdr agent
-multiplexer, and one global `AGENTS.md` shared by every coding agent.
+WSL Ubuntu is not NixOS, so there is no system-level Nix layer to hook into.
+**Standalone home-manager** owns `$HOME` and nothing else. That turns out to be
+the right amount: no `sudo`, no fight with `apt`, and nothing outside your home
+directory to go wrong.
+
+You get Nix-managed packages, zsh with autosuggestions and syntax highlighting,
+Starship, a modular Neovim config, the herdr agent multiplexer, one global
+`AGENTS.md` shared by every coding agent, Hack Nerd Font installed on the
+Windows side straight from the Nix store, and a terminal colour scheme seeded on
+first install.
 
 ---
 
 ## Contents
 
 - [Design](#design)
-- [How this differs from the video](#how-this-differs-from-the-video)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
 - [Daily use](#daily-use)
+- [Per-project toolchains](#per-project-toolchains)
 - [Customizing](#customizing)
 - [Repo layout](#repo-layout)
 - [What is and is not reproducible](#what-is-and-is-not-reproducible)
@@ -30,19 +34,24 @@ multiplexer, and one global `AGENTS.md` shared by every coding agent.
 
 ## Design
 
-Two ideas carry the whole port.
+Three ideas carry the whole repo.
 
 **Everything that can live in WSL, does.** Packages, shell, editor, multiplexer
 and agent config are all Nix-managed and pinned by `flake.lock`. Wipe the
 distro, clone, run `./bootstrap.sh`, and you are back exactly where you were.
 
-**The terminal is not the point.** The video spends a chapter configuring
-WezTerm, but on WSL the terminal emulator is a Windows process that Nix cannot
-manage. It is also mostly redundant here: **herdr** provides the workspaces,
-tabs, panes and detachable sessions, so the host terminal only has to be a fast,
-correct VT renderer with a good font. So this port drops WezTerm and uses
-Windows Terminal, themed from two small JSON files in this repo and pushed
-across the boundary by WSL itself. No PowerShell step, no admin rights.
+**`$HOME` is global, projects are not.** This config installs the tools you
+want on *every* machine. A project's Python version, its Node version and its
+dependencies belong to that project, in its own `flake.nix`, loaded on `cd` by
+direnv. That is what replaces nvm, pyenv and `pip install --user`. See
+[Per-project toolchains](#per-project-toolchains).
+
+**The terminal is a Windows process, so it gets seeded, not managed.** Windows
+Terminal draws the window, and Nix cannot reach it. Two things cross the
+boundary during install: the font, and a colour scheme. After that the terminal
+is yours and no rebuild touches it. herdr provides the workspaces, tabs, panes
+and detachable sessions, so the host terminal only has to be a fast, correct VT
+renderer with a good font.
 
 ```mermaid
 flowchart TB
@@ -54,23 +63,25 @@ flowchart TB
     subgraph WSL["WSL2 Ubuntu - everything Nix-managed"]
         HM["home-manager<br/>flake.nix + home.nix"]
         HERDR["herdr<br/>workspaces, tabs, panes"]
-        BIN["nvim, zsh, starship,<br/>ripgrep, fd, fzf, jq, ..."]
+        BIN["nvim, zsh, starship, node,<br/>uv, direnv, ripgrep, fd, fzf, jq"]
         subgraph CFG["home/ - live-symlinked config"]
             NVIM["nvim/"]
             HCFG["herdr/config.toml"]
             AG["AGENTS.md"]
         end
-        SYNC["scripts/<br/>install-windows-font.sh"]
+        SEED["scripts/<br/>font + theme, at install only"]
+        PROJ["your projects<br/>flake.nix + .envrc each"]
     end
 
     HM -->|builds| BIN
     HM -->|builds| HERDR
     HM -->|mkOutOfStoreSymlink| CFG
-    HM -->|"nerd-fonts.hack"| SYNC
-    SYNC -->|"reg.exe"| WT
-    SYNC --> FONT
+    HM -->|"nerd-fonts.hack + windows/"| SEED
+    SEED -->|"reg.exe, once"| WT
+    SEED --> FONT
     WT ==>|attaches to| HERDR
     HERDR --> BIN
+    BIN -.->|direnv loads| PROJ
     AG -.->|symlinked| AGENTS["~/.codex/AGENTS.md<br/>~/.config/opencode/AGENTS.md"]
 
     style WIN fill:#2a2438,stroke:#c4a7e7,color:#e0def4
@@ -81,23 +92,6 @@ flowchart TB
 Config under `home/` is linked with `mkOutOfStoreSymlink`, so editing a file in
 this repo takes effect immediately with no rebuild. You only rebuild when you
 change which packages Nix manages.
-
-## How this differs from the video
-
-| Video (macOS) | Here (WSL Ubuntu) | Why |
-| --- | --- | --- |
-| `nix-darwin` | standalone `home-manager` | WSL Ubuntu is not NixOS, so there is no system-level Nix module. home-manager owns `$HOME` only. |
-| `sudo darwin-rebuild switch` | `home-manager switch` (no sudo) | Nothing outside `$HOME` is touched. |
-| `nix-homebrew` + `brews`/`casks` | `home.packages` from nixpkgs | No Homebrew on Linux, and no need for it. |
-| WezTerm, configured in Lua | Windows Terminal, themed from JSON | The terminal is a Windows process. herdr already provides tabs and panes, so its config surface is redundant. |
-| `macos_window_background_blur` | `useAcrylic` + `opacity` | Same frosted look, different platform. |
-| `system.defaults` (dock, Finder) | dropped | Desktop appearance, not dev environment, and not reproducible on Windows. Overclaiming to ship it. |
-| `nerd-fonts.hack` via Nix is enough | Nix font, copied to Windows | The Windows font renderer cannot see Linux fontconfig. Still one pinned source. |
-| `clipboard = 'unnamedplus'` just works | bridged via `clip.exe` / `powershell.exe` | A WSL VM has no selection wired to the Windows clipboard. |
-| `herdr` from Homebrew | pinned upstream binary in `modules/herdr.nix` | Not in nixpkgs; pinned by hash rather than `curl \| sh`. |
-| zsh is already the login shell | `bootstrap.sh` runs `chsh` | Ubuntu logs you into bash. |
-
-Full reasoning: [`docs/00-what-changed-from-macos.md`](docs/00-what-changed-from-macos.md).
 
 ## Prerequisites
 
@@ -130,44 +124,63 @@ That is the whole install. There is no second step on the Windows side.
 | 4 | Offers to rewrite the `user = ` line in `flake.nix` to your username |
 | 5 | Runs the first `home-manager switch` (retries on transient WSL DNS) |
 | 6 | Makes the Nix zsh your login shell |
-| 7 | Installs the font on Windows and themes Windows Terminal |
+| 7 | Installs Hack Nerd Font on the Windows side |
+| 8 | Seeds the Windows Terminal colour scheme, once |
 
 > If step 1 tells you to run `wsl --shutdown`, do that from **PowerShell**,
 > reopen Ubuntu, and re-run `./bootstrap.sh`. Enabling systemd needs a restart.
 
 The first build downloads a lot. That is normal and happens once.
 
-Then open Windows Terminal and set your WSL profile's font face to `Hack Nerd
-Font`. If glyphs look wrong, sign out of Windows and back in once so it picks up
-the newly registered font.
-
-Colours, transparency and padding are yours to set in Windows Terminal's own
-Settings UI - this repo deliberately does not write that file. See
-[docs/05](docs/05-terminal.md).
+Restart Windows Terminal afterwards. If glyphs still look wrong, sign out of
+Windows and back in once so the newly registered font is enumerated.
 
 ## Daily use
 
 ```bash
-./rebuild.sh       # apply any change: packages, shell, editor, terminal theme
+./rebuild.sh       # apply any change to packages, shell or editor
 ```
 
 Editing anything under `home/` (Neovim, herdr, `AGENTS.md`) needs **no rebuild**
-- those are live symlinks. Rebuild when you change packages, or the terminal
-theme, which is pushed to Windows at the end of every rebuild.
+- those are live symlinks. Rebuild when you change which packages Nix manages.
+
+`rebuild.sh` deliberately does not touch Windows Terminal. See
+[the terminal doc](docs/05-terminal.md) for why.
 
 Start the multiplexer with `herdr`. Keybindings mirror tmux: `ctrl+b` prefix,
 `prefix+c` new tab, `prefix+%` and `prefix+"` to split.
 
+## Per-project toolchains
+
+`home.nix` installs the tools that should exist everywhere: Node 24, uv, git,
+ripgrep, Neovim. It does **not** install per-project versions. Those go in the
+project:
+
+```bash
+cd ~/my-api
+nix flake init -t ~/.dotfiles#python    # or #node
+direnv allow
+```
+
+`cd` in and the project's Python, uv and ruff are on `PATH`. `cd` out and they
+are gone. The versions are pinned by that project's own `flake.lock`, so they
+travel with the repo rather than living on one laptop.
+
+This is what replaces nvm, pyenv, conda and `pip install --user`. Full
+explanation and the escape hatches in [docs/11-devshells.md](docs/11-devshells.md).
+
 ## Customizing
 
 **Add a CLI tool.** Find it on [search.nixos.org](https://search.nixos.org/packages),
-add it to `home.packages` in `home.nix`, run `./rebuild.sh`.
+add it to `home.packages` in `home.nix`, run `./rebuild.sh`. If it is only
+needed by one project, put it in that project's flake instead.
 
 **Add a shell alias.** `programs.zsh.shellAliases` in `home.nix`, then rebuild.
 
-**Change the terminal font size or colours.** Edit
-Windows Terminal's own Settings UI. This repo does not manage colours,
-opacity or padding - only the font. See [docs/05](docs/05-terminal.md).
+**Change terminal colours, opacity or padding.** Windows Terminal's own Settings
+UI. This repo seeds the scheme once at install and never writes that file again.
+To re-seed after changing `windows/`, run
+`./scripts/apply-windows-terminal-theme.sh --force`.
 
 **Add a Neovim plugin.** Drop a file in `home/.config/nvim/lua/plugins/`.
 lazy.nvim loads every file in that directory. No rebuild.
@@ -186,12 +199,20 @@ See [docs/05-terminal.md](docs/05-terminal.md).
 ```
 dotfiles-wsl/
 ├── flake.nix                       # inputs, pinning, the one `user =` line
-├── home.nix                        # packages, zsh, starship, symlinks
+├── home.nix                        # packages, zsh, starship, direnv, symlinks
 ├── modules/herdr.nix               # herdr from a hash-pinned upstream binary
 ├── bootstrap.sh                    # one-time setup, end to end
 ├── rebuild.sh                      # the everyday command
 ├── scripts/
-│   └── install-windows-font.sh    # the only thing that crosses to Windows
+│   ├── install-windows-font.sh     # font -> Windows, every rebuild
+│   └── apply-windows-terminal-theme.sh   # theme -> Windows, install only
+├── windows/                        # what gets seeded across the boundary
+│   ├── blackpanther.json           # colour scheme
+│   ├── profile-defaults.json       # font, opacity, padding, cursor
+│   └── blackpanther.jpg            # background image
+├── templates/                      # `nix flake init -t ~/.dotfiles#python`
+│   ├── python/
+│   └── node/
 ├── home/                           # live-symlinked into $HOME
 │   ├── AGENTS.md                   # global agent memory, shared by all agents
 │   └── .config/
@@ -208,46 +229,51 @@ dotfiles-wsl/
 
 ## What is and is not reproducible
 
-Worth being precise about, since reproducibility is the video's whole premise.
+Worth being precise about, since that is the entire point of the repo.
 
 **Fully reproducible**, declared in Nix and pinned by `flake.lock`: every CLI
-package, Neovim, zsh and its plugins, Starship, herdr, the Hack Nerd Font
-files, and every symlink into `$HOME`.
+package, Node, uv, direnv, Neovim, zsh and its plugins, Starship, herdr, the
+Hack Nerd Font files, and every symlink into `$HOME`.
 
-**Generated from this repo, re-applied every rebuild**: the Windows Terminal
-colour scheme and profile, and the font's presence on the Windows side. Driven
-from committed files, so there is one source of truth - but `settings.json` is a
-file Windows also writes, and nothing reverts a change you make by hand in the
-Settings UI. The sync reasserts our keys and leaves everything else alone.
+**Reproducible per project**, pinned by that project's own `flake.lock`:
+language runtimes and project tooling, loaded by direnv on `cd`.
+
+**Seeded once at install, then yours**: the Windows Terminal colour scheme,
+font face, opacity and background image. Driven from committed files in
+`windows/`, so a new machine gets your look automatically - but `settings.json`
+is a file Windows Terminal itself writes, so after the first install this repo
+never touches it again. Nothing reverts a change you make in the Settings UI.
 
 **Not managed at all**: Windows Terminal itself (ships with Windows) and Windows
 desktop settings. An earlier version of this repo shipped a `settings.ps1` of
 registry writes; it was removed as overclaiming.
 
-**Deliberately not pinned**: Neovim plugins, managed by lazy.nvim exactly as in
-the video. Commit `home/.config/nvim/lazy-lock.json` if you want them locked.
+**Deliberately not pinned**: Neovim plugins, managed by lazy.nvim. Commit
+`home/.config/nvim/lazy-lock.json` if you want them locked. Self-updating agent
+CLIs (Claude Code, Codex) are likewise left to manage themselves in
+`~/.local/bin`; see [docs/08-agents.md](docs/08-agents.md).
 
 ## Docs
 
 | Doc | Covers |
 | --- | --- |
-| [00 - What changed from macOS](docs/00-what-changed-from-macos.md) | Every deviation from the video and why |
-| [01 - flake.nix](docs/01-flake-nix.md) | Inputs, pinning, `homeConfigurations` |
-| [02 - home.nix](docs/02-home-nix.md) | Packages, zsh, Starship, `mkOutOfStoreSymlink` |
+| [00 - Architecture](docs/00-architecture.md) | Why the repo is shaped this way: no system layer, and the Windows boundary |
+| [01 - flake.nix](docs/01-flake-nix.md) | Inputs, pinning, `homeConfigurations`, templates |
+| [02 - home.nix](docs/02-home-nix.md) | Packages, zsh, Starship, direnv, `mkOutOfStoreSymlink` |
 | [03 - modules/herdr.nix](docs/03-modules-herdr-nix.md) | Packaging a pinned binary in Nix |
 | [04 - bootstrap.sh / rebuild.sh](docs/04-bootstrap-and-rebuild.md) | Both scripts, step by step |
-| [05 - The terminal](docs/05-terminal.md) | Why WezTerm was dropped; the Windows Terminal setup |
+| [05 - The terminal](docs/05-terminal.md) | Seeding the theme, and why it is seeded rather than managed |
 | [06 - Neovim](docs/06-neovim.md) | Every Lua file, including the clipboard bridge |
 | [07 - herdr](docs/07-herdr.md) | Keybindings and running agents in panes |
 | [08 - Agents](docs/08-agents.md) | `AGENTS.md` fan-out, and what this repo refuses to manage |
-| [09 - The Windows bridge](docs/09-windows-bridge.md) | `install-windows-font.sh`, line by line |
+| [09 - The Windows bridge](docs/09-windows-bridge.md) | The two scripts that cross to Windows |
 | [10 - Troubleshooting](docs/10-troubleshooting.md) | WSL-specific failure modes |
+| [11 - Devshells](docs/11-devshells.md) | Per-project toolchains with flakes and direnv |
 
 ## Credit
 
-Original macOS configuration and the video explaining it:
-[kunchenguid/dotfiles](https://github.com/kunchenguid/dotfiles).
-This repo is an unaffiliated port.
+Derived from a macOS nix-darwin configuration by
+[kunchenguid](https://github.com/kunchenguid/dotfiles). Unaffiliated port.
 
 ## License
 

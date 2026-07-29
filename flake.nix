@@ -2,8 +2,8 @@
   description = "dotfiles for WSL Ubuntu";
 
   inputs = {
-    # Linux release branch. The macOS original uses `nixpkgs-26.05-darwin`;
-    # that branch only builds Darwin packages, so on WSL we track `nixos-26.05`.
+    # The Linux release branch is called `nixos-<release>` even though nothing
+    # here runs NixOS; the `-darwin` branches only build macOS packages.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     home-manager.url = "github:nix-community/home-manager/release-26.05";
@@ -33,12 +33,28 @@
     in
     {
       # `home-manager switch --flake ~/.dotfiles#wsl` targets this attribute.
-      # The macOS original calls its equivalent "mac"; if you rename "wsl",
-      # rename it in bootstrap.sh and rebuild.sh too.
+      # If you rename "wsl", rename it in bootstrap.sh and rebuild.sh too.
       homeConfigurations."wsl" = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         extraSpecialArgs = { inherit user; };
         modules = [ ./home.nix ];
+      };
+
+      # Starting points for per-project devshells:
+      #     nix flake init -t ~/.dotfiles#python
+      #
+      # This config owns $HOME, not your projects. A project's toolchain
+      # belongs in that project, pinned by its own flake.lock, so it travels
+      # with the repo instead of living on one laptop. See docs/11-devshells.md.
+      templates = {
+        python = {
+          path = ./templates/python;
+          description = "python 3.12 + uv + ruff devshell";
+        };
+        node = {
+          path = ./templates/node;
+          description = "node 24 + pnpm devshell";
+        };
       };
     };
 }

@@ -21,10 +21,10 @@ Free-text label, shown by `nix flake show`. No functional effect.
 The package set. `nixos-26.05` is the stable release branch; it receives
 security and bugfix backports but no version churn, so builds stay predictable.
 
-The video uses `nixpkgs-26.05-darwin`. Branches ending in `-darwin` are built
-and cached only for macOS, so on Linux you want `nixos-<release>` even though
-you are not running NixOS. Using `nixpkgs-unstable` here instead would track
-the rolling branch and give you exactly the "surprises" the video pins against.
+Branches ending in `-darwin` are built and cached only for macOS, so on Linux
+you want `nixos-<release>` even though you are not running NixOS. Using
+`nixpkgs-unstable` here instead would track the rolling branch, which is the
+opposite of what pinning is for.
 
 ```nix
     home-manager.url = "github:nix-community/home-manager/release-26.05";
@@ -47,8 +47,9 @@ up with two different builds of the same library in one profile.
   };
 ```
 
-The two inputs the video has that this repo deliberately drops. See
-[00-what-changed-from-macos.md](00-what-changed-from-macos.md).
+The two inputs a macOS setup would have, deliberately absent here. nix-darwin
+is macOS-only and there is no system-level Nix layer on WSL Ubuntu to hook into.
+See [00-architecture.md](00-architecture.md).
 
 ```nix
   outputs = { self, nixpkgs, home-manager, ... }:
@@ -73,7 +74,6 @@ later without needing to edit this signature.
 
 The build platform. `x86_64-linux` covers every Intel and AMD PC. Change to
 `aarch64-linux` only on Windows-on-ARM hardware (Snapdragon X, Surface Pro X).
-This replaces the video's `nixpkgs.hostPlatform = "aarch64-darwin"`.
 
 ```nix
       pkgs = import nixpkgs {
@@ -82,9 +82,9 @@ This replaces the video's `nixpkgs.hostPlatform = "aarch64-darwin"`.
       };
 ```
 
-Instantiates nixpkgs for our platform. `allowUnfree` is the direct equivalent
-of the video's `nixpkgs.config.allowUnfree = true`: nixpkgs refuses to build
-non-free-licensed packages unless you opt in. Nothing in the current package set
+Instantiates nixpkgs for our platform. `allowUnfree` matters because nixpkgs
+refuses to build non-free-licensed packages unless you opt in. Nothing in the
+current package set
 needs it, but it is kept so adding one later does not mean editing `flake.nix`
 and re-learning why the build suddenly fails.
 
@@ -97,9 +97,8 @@ default config, and there is no way to set `allowUnfree` on it.
 ```
 
 The output the tooling looks for. `home-manager switch --flake ~/.dotfiles#wsl`
-selects this attribute by the name `wsl`. The video's equivalent is
-`darwinConfigurations."mac"`. If you rename `"wsl"`, change the `#wsl` fragment
-in both `bootstrap.sh` and `rebuild.sh` too.
+selects this attribute by the name `wsl`. If you rename `"wsl"`, change the
+`#wsl` fragment in both `bootstrap.sh` and `rebuild.sh` too.
 
 ```nix
         inherit pkgs;
@@ -112,7 +111,7 @@ Shorthand for `pkgs = pkgs;`, handing our configured package set to home-manager
 ```
 
 Makes `user` available as a module argument, which is why `home.nix` can begin
-with `{ config, pkgs, user, ... }:`. The video passes the same value through
+with `{ config, pkgs, user, ... }:`. NixOS and nix-darwin spell this
 `specialArgs`; the `extra` prefix is the home-manager spelling.
 
 ```nix
@@ -121,6 +120,28 @@ with `{ config, pkgs, user, ... }:`. The video passes the same value through
 
 The module list. Everything else lives in `home.nix`. To split your config
 further, add more files here.
+
+```nix
+      templates = {
+        python = { path = ./templates/python; description = "..."; };
+        node   = { path = ./templates/node;   description = "..."; };
+      };
+```
+
+The second output. `templates` is a standard flake output that
+`nix flake init -t` reads, so a new project starts from a known-good devshell:
+
+```bash
+cd ~/my-api
+nix flake init -t ~/.dotfiles#python
+```
+
+That copies `templates/python/` into the current directory. The copied flake
+pins its own nixpkgs and has its own `flake.lock`, entirely independent of this
+one - updating your dotfiles never moves a project's toolchain. See
+[11-devshells.md](11-devshells.md).
+
+List what is available with `nix flake show ~/.dotfiles`.
 
 ## Working with the lock file
 

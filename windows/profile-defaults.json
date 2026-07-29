@@ -1,0 +1,16 @@
+{
+  "colorScheme": "blackpanther",
+  "font": {
+    "face": "Hack Nerd Font Mono",
+    "size": 14
+  },
+  "opacity": 80,
+  "padding": "8",
+  "cursorShape": "filledBox",
+  "intenseTextStyle": "bright",
+  "historySize": 12000,
+  "antialiasingMode": "grayscale",
+  "backgroundImage": "__BACKGROUND_IMAGE__",
+  "backgroundImageOpacity": 0.25,
+  "backgroundImageStretchMode": "uniformToFill"
+}

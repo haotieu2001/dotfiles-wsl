@@ -1,7 +1,7 @@
 # 06 - Neovim
 
-The video's 17:46 chapter. Structurally identical here; the one WSL-specific
-addition is the clipboard bridge.
+A modular lazy.nvim config. The one WSL-specific addition is the clipboard
+bridge.
 
 `home.nix` links the whole directory with `mkOutOfStoreSymlink`, so every file
 below is live-edited. No rebuild after changing any of them.
@@ -153,7 +153,7 @@ vim.opt.rtp:prepend(lazypath)
 require('lazy').setup('plugins')
 ```
 
-The standard lazy.nvim bootstrap from the video at 22:45.
+The standard lazy.nvim bootstrap.
 
 - `stdpath('data')` is `~/.local/share/nvim`, so plugins live outside this repo
   and are not committed.
@@ -214,9 +214,9 @@ sets the `require` path, since the repo is `rose-pine/neovim`.
         transparency = string.find(vim.uv.os_uname().release, 'WSL') ~= nil,
 ```
 
-**Changed from the video**, which also tests for Darwin. On WSL the kernel
-release string looks like `6.18.x-microsoft-standard-WSL2`, so matching `WSL` is
-sufficient here.
+On WSL the kernel release string looks like `6.18.x-microsoft-standard-WSL2`,
+so matching `WSL` is sufficient. A config that also had to run on macOS would
+need a Darwin branch here as well.
 
 Transparency makes Neovim skip painting a background, letting the terminal's
 opacity and Acrylic backdrop show through. Without it the editor is an opaque
@@ -279,8 +279,8 @@ replaces `vim.ui.input` prompts.
 `<space>f` files, `<space>s` grep, `<space>b` buffers, `gd` go to definition.
 The grep picker uses `ripgrep`, which is why it is in `home.packages`.
 
-`gd` needs a running LSP server to return anything. This config does not set up
-LSP, matching the video, which explicitly leaves it out at 33:04.
+`gd` needs a running LSP server to return anything. This config deliberately
+does not set up LSP.
 
 ---
 
@@ -294,8 +294,8 @@ LSP, matching the video, which explicitly leaves it out at 33:04.
   },
 ```
 
-A magit-style git UI on `<space>g`, for reviewing diffs and staging hunks. The
-video's main reason for opening Neovim while working with agents.
+A magit-style git UI on `<space>g`, for reviewing diffs and staging hunks. This
+is the main reason to open Neovim while working with agents.
 
 ```lua
   {
@@ -332,5 +332,5 @@ This is why every keymap above passes `desc` - which-key displays those strings.
 ## Plugin versions
 
 lazy.nvim writes resolved commits to `lazy-lock.json`. This repo does not ship
-one, matching the video. If you want plugins pinned as tightly as your Nix
-packages, commit `home/.config/nvim/lazy-lock.json` after running `:Lazy sync`.
+one, so plugins float. If you want them pinned as tightly as your Nix packages,
+commit `home/.config/nvim/lazy-lock.json` after running `:Lazy sync`.

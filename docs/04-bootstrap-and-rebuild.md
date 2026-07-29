@@ -15,8 +15,13 @@ home-manager switch --flake ~/.dotfiles#wsl -b backup
 exec "$DIR/scripts/install-windows-font.sh"
 ```
 
-The sync runs after every switch. It is cheap and idempotent, so the terminal
-theme cannot drift from what is committed in the repo.
+The font install runs after every switch. It is cheap and idempotent, so the
+font on the Windows side cannot drift from the one `flake.lock` pins.
+
+Note what `rebuild.sh` does **not** call:
+`scripts/apply-windows-terminal-theme.sh`. The theme is seeded once by
+`bootstrap.sh` and then belongs to you. Reasoning in
+[05-terminal.md](05-terminal.md).
 
 - `set -euo pipefail` - exit on any failing command (`e`), on any undefined
   variable (`u`), and on a failure anywhere in a pipeline rather than only at
@@ -34,12 +39,11 @@ theme cannot drift from what is committed in the repo.
 - `-b backup` - if activation is about to overwrite a file it does not manage
   (typically `~/.bashrc` or `~/.profile`), rename it to `<name>.backup` instead
   of aborting. Standalone home-manager fails hard on collisions without this,
-  which is a very common first-run stumble that the video never hits because
-  nix-darwin handles it differently.
+  which is a very common first-run stumble.
 
-**No `sudo`.** The video's script needs it because `darwin-rebuild` edits system
-state. This one only writes `$HOME`, and running it as root would build the
-config into `/root`.
+**No `sudo`.** `nixos-rebuild` and `darwin-rebuild` need it because they edit
+system state. This one only writes `$HOME`, and running it as root would build
+the config into `/root`.
 
 ---
 
@@ -96,11 +100,12 @@ else
 fi
 ```
 
-Same installer as the video; it supports WSL2 directly. The curl flags matter:
+The Determinate installer supports WSL2 directly. The curl flags matter:
 `--proto '=https'` refuses a plaintext redirect, `--tlsv1.2` sets a TLS floor,
 `-f` makes HTTP errors non-zero instead of piping an error page into `sh`.
 
-`--no-confirm` skips the interactive prompt the video answers by hand.
+`--no-confirm` skips the interactive prompt, since bootstrap already asked you
+to run it.
 
 The trailing `.` sources the profile script so `nix` is on `PATH` for the rest of
 *this* script; new shells get it automatically.
@@ -127,13 +132,11 @@ this stops matching, which is why `flake.nix` calls it out.
     sed -i -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
 ```
 
-Rewrites it in place. **This differs from the macOS original**, which uses
-`sed -i '' -E`. BSD sed on macOS requires an explicit backup-suffix argument;
-GNU sed on Ubuntu treats `''` as the script and fails. A small but real porting bug
-if you copy the macOS line over.
+Rewrites it in place. Note this is GNU sed: `-i` takes no argument. BSD sed, as
+found on macOS, requires an explicit backup-suffix (`sed -i '' -E`), so a line
+copied from a macOS script fails here and vice versa.
 
-Unlike the macOS script, no `sudo` runs before this point, so `whoami` is
-reliable here.
+No `sudo` runs before this point, so `whoami` is reliable here.
 
 ### Step 5 - the first switch
 
@@ -179,24 +182,44 @@ duplicate entry.
 The fallback printed on failure is to append `exec ~/.nix-profile/bin/zsh -l` to
 `~/.bashrc`, which achieves the same result at login.
 
-macOS already uses zsh, so the video has no equivalent step.
+This step exists because Ubuntu logs you into bash. A distro that already
+defaults to zsh would not need it.
 
-### Step 7 - Windows Terminal
+### Step 7 - the font
 
 ```bash
 "$DIR/scripts/install-windows-font.sh" || \
   echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 ```
 
-Pushes the font and terminal theme across to Windows. There is no separate
-PowerShell step: WSL can call Windows executables and write to the Windows
-filesystem, so this runs inside the same bootstrap.
+Pushes the font across to Windows. There is no separate PowerShell step: WSL can
+call Windows executables and write to the Windows filesystem, so this runs
+inside the same bootstrap.
 
-The `||` matters. A terminal that is not themed yet is a cosmetic problem, not a
-reason to fail a bootstrap that has already installed everything else
-successfully. Covered in [09-windows-bridge.md](09-windows-bridge.md).
+The `||` matters. A missing font is a cosmetic problem, not a reason to fail a
+bootstrap that has already installed everything else successfully. Covered in
+[09-windows-bridge.md](09-windows-bridge.md).
+
+### Step 8 - seed the terminal theme
+
+```bash
+"$DIR/scripts/apply-windows-terminal-theme.sh" || \
+  echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
+```
+
+**The only place this script is ever called automatically.** It merges the
+colour scheme and profile defaults from `windows/` into Windows Terminal's
+`settings.json`, backing the file up first.
+
+It is a no-op if the scheme is already there, which is what makes re-running
+bootstrap safe: your terminal customisations are never silently reverted. The
+same `||` guard applies for the same reason.
+
+Full reasoning for why this runs at bootstrap and not at rebuild is in
+[05-terminal.md](05-terminal.md).
 
 ## Re-running
 
 Every step is guarded, so re-running is a cheap way to repair a partial setup.
 The only step that changes anything on a second run is step 5, which rebuilds.
+Step 8 explicitly does nothing once the theme has been seeded.
