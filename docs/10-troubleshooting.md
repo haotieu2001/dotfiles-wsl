@@ -1,19 +1,19 @@
-# 10 - Troubleshooting
+# 10 - When things break
 
-Failure modes specific to running this setup on WSL rather than macOS.
+Problems you are likely to hit when running this setup on WSL.
 
-## Install
+## Installing
 
-### `bootstrap.sh` exits telling me to run `wsl --shutdown`
+### `bootstrap.sh` stops and tells me to run `wsl --shutdown`
 
-Working as intended. `/etc/wsl.conf` is read only at distro start, so enabling
-systemd needs a restart. From **PowerShell**, not inside WSL:
+This is normal. `/etc/wsl.conf` is only read when the distro starts, so turning
+on systemd needs a restart. Run this from **PowerShell**, not inside WSL:
 
 ```powershell
 wsl --shutdown
 ```
 
-Reopen Ubuntu and re-run `./bootstrap.sh`. Confirm with:
+Open Ubuntu again and run `./bootstrap.sh` again. Check it worked with:
 
 ```bash
 systemctl is-system-running     # "running" or "degraded" are both fine
@@ -21,7 +21,7 @@ systemctl is-system-running     # "running" or "degraded" are both fine
 
 ### `nix: command not found` right after installing Nix
 
-The installer adds Nix to *new* shells. Either open a new shell, or:
+The installer only adds Nix to *new* shells. Open a new one, or run:
 
 ```bash
 . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
@@ -29,8 +29,8 @@ The installer adds Nix to *new* shells. Either open a new shell, or:
 
 ### `error: experimental Nix feature 'nix-command' is disabled`
 
-Nix came from somewhere other than the Determinate installer. Either reinstall
-with it, or:
+Nix was installed some other way than the Determinate installer. Either install
+it again with that one, or run:
 
 ```bash
 mkdir -p ~/.config/nix
@@ -39,9 +39,9 @@ echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
 
 ### `Existing file '/home/you/.bashrc' would be clobbered`
 
-home-manager refuses to overwrite files it does not manage. Both scripts already
-pass `-b backup` to rename them instead. If you hit this, you ran home-manager
-by hand without that flag - use `./rebuild.sh`.
+home-manager refuses to overwrite files it did not create. Both scripts already
+pass `-b backup`, which renames the old file instead. If you see this, you ran
+home-manager yourself without that option. Use `./rebuild.sh`.
 
 ### `Could not resolve host` during the first build
 
@@ -51,22 +51,20 @@ by hand without that flag - use `./rebuild.sh`.
 error: cannot download herdr-linux-x86_64 from any mirror
 ```
 
-**Almost always transient. Re-run `./bootstrap.sh`.** Since Nix caches what it
-already fetched, the retry resumes rather than starting over. `bootstrap.sh`
-now retries the switch three times on its own.
+**This is almost always temporary. Just run `./bootstrap.sh` again.** Nix keeps
+what it already downloaded, so the second try carries on instead of starting
+over. `bootstrap.sh` also tries three times by itself.
 
-The cause is a WSL timing quirk, not a misconfiguration. WSL routes DNS through
-a proxy on the Windows host (typically `10.255.255.254`, see `/etc/resolv.conf`),
-and that proxy is briefly unreachable while the Nix daemon and systemd units
-settle right after Step 2 installs Nix. Flake inputs are fetched by the daemon
-and usually land before the gap; fixed-output derivations like `herdr`
-download inside the build sandbox moments later and hit it.
+The cause is timing, not a broken setup. WSL sends all network lookups through
+Windows, and that path is briefly unavailable while Nix and systemd start up
+right after step 2. Most downloads happen before the gap. Files like `herdr` are
+downloaded a moment later, inside a sealed build area, and hit it.
 
-The giveaway is that every retry fails inside a few seconds, and packages that
-came from `cache.nixos.org` in the same run succeeded.
+The clue is that every retry fails within a few seconds, while other packages in
+the same run downloaded fine.
 
-If it persists, confirm DNS actually works from inside the sandbox rather than
-just from your shell:
+If it keeps happening, check whether name lookups work *inside* the sealed build
+area, not just in your shell:
 
 ```bash
 nix build --impure --no-link --expr '
@@ -78,12 +76,11 @@ nix build --impure --no-link --expr '
 '
 ```
 
-Read the log it prints. A nameserver line plus no `curl: (6)` means DNS is fine
-inside the sandbox and the earlier failure was the timing gap. A genuinely
-broken setup shows an empty or missing `resolv.conf`.
+Read the log it prints. If you see a `nameserver` line and no `curl: (6)`, then
+lookups work and the earlier failure was just the timing gap. A truly broken
+setup shows an empty or missing `resolv.conf`.
 
-Only if it is genuinely and repeatedly broken, give the sandbox a stable
-resolver by replacing the WSL-generated symlink:
+Only if it is really broken, give the build area a fixed name server:
 
 ```bash
 sudo tee -a /etc/wsl.conf >/dev/null <<'EOF'
@@ -95,12 +92,13 @@ sudo rm -f /etc/resolv.conf
 printf 'nameserver 10.255.255.254\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf >/dev/null
 ```
 
-Keep the WSL proxy first so split-DNS on a VPN or corporate network still
-resolves internal names. Then `wsl --shutdown` from PowerShell.
+Keep the WSL address first, so a VPN or company network can still find its
+internal names. Then run `wsl --shutdown` from PowerShell.
 
-### The first build is extremely slow
+### The first build is very slow
 
-Expected once. If it is slow *every* time, check the repo is not on `/mnt/c`:
+That is expected, once. If it is slow *every* time, check the repo is not on the
+Windows disk:
 
 ```bash
 pwd -P      # should start with /home, not /mnt
@@ -108,39 +106,40 @@ pwd -P      # should start with /home, not /mnt
 
 ### `error: attribute 'wsl' missing`
 
-The flake fragment does not match. `flake.nix` must define
-`homeConfigurations."wsl"` and the scripts must use `#wsl`.
+The name does not match. `flake.nix` must define `homeConfigurations."wsl"`, and
+the scripts must use `#wsl`.
 
 ### `error: Package '<name>' has an unfree license`
 
-You added a package with a non-free license. `config.allowUnfree = true` is
-missing from the `import nixpkgs` block in `flake.nix`, or nixpkgs was pulled in
-via `legacyPackages`, which ignores config.
+You added a program whose licence is not open source. Either
+`config.allowUnfree = true` is missing from the `import nixpkgs` block in
+`flake.nix`, or nixpkgs was loaded through `legacyPackages`, which ignores that
+setting.
 
 ## Shell
 
-### Still in bash after bootstrap
+### Still in bash after installing
 
-Check what step 6 did:
+Check what step 6 managed to do:
 
 ```bash
 getent passwd "$USER" | cut -d: -f7
 ```
 
-If it is not the Nix zsh, run it manually:
+If that is not the Nix zsh, set it yourself:
 
 ```bash
 echo "$HOME/.nix-profile/bin/zsh" | sudo tee -a /etc/shells
 chsh -s "$HOME/.nix-profile/bin/zsh"
 ```
 
-`chsh` needs your **UNIX password**, not sudo, and fails under some WSL PAM
-setups. Note that `sudo tee` succeeding tells you nothing about whether `chsh`
-did: in the combined one-liner the first half can work while the second fails.
-Run `chsh` on its own to see the actual error.
+`chsh` asks for your **Linux password**, not sudo, and fails on some WSL setups.
+Note that `sudo tee` working tells you nothing about whether `chsh` worked. In
+the two-command line above, the first half can succeed while the second fails.
+Run `chsh` on its own to see the real error.
 
-If it will not work, `bootstrap.sh` falls back to launching zsh from
-`~/.bashrc`. To do it by hand, append **this**, not a bare `exec`:
+If it will not work at all, `bootstrap.sh` starts zsh from `~/.bashrc` instead.
+To do that by hand, add **this**, not a plain `exec`:
 
 ```bash
 if shopt -q login_shell && [[ $- == *i* ]] && [ -t 0 ] \
@@ -149,175 +148,164 @@ if shopt -q login_shell && [[ $- == *i* ]] && [ -t 0 ] \
 fi
 ```
 
-The `shopt -q login_shell` test is the important one. A bare
-`exec zsh -l` in `~/.bashrc` also fires for *non-login* interactive shells, so
-any tool that runs `bash -ic "some command"` gets zsh exec'd over it, loses the
-command, and hangs forever. `[ -t 0 ]` keeps it out of pipelines.
+The `shopt -q login_shell` check is the important part. A plain `exec zsh -l` in
+`~/.bashrc` also runs for shells that are *not* login shells. So any tool that
+runs `bash -ic "some command"` gets zsh started over the top of it, loses the
+command, and hangs forever. The `[ -t 0 ]` check keeps it out of pipelines.
 
-Log out and back in either way; `chsh` does not affect the current session.
+Either way, log out and back in. `chsh` does not change the shell you are in
+right now.
 
-### /etc/shells has duplicate zsh entries
+### `/etc/shells` has zsh listed twice
 
-Harmless, but from re-running the registration. Tidy up with:
+Harmless, and caused by running the setup twice. Clean it up with:
 
 ```bash
 sudo cp /etc/shells /etc/shells.bak
 sudo awk '!seen[$0]++' /etc/shells.bak | sudo tee /etc/shells >/dev/null
 ```
 
-### Aliases or `$EDITOR` did not update
+### Shortcuts or `$EDITOR` did not change
 
-`sessionVariables` are exported at session start. Open a new shell.
+These are set when a shell starts. Open a new shell.
 
-### Prompt shows boxes or missing glyphs
+### The prompt shows boxes instead of symbols
 
 Starship's symbols need a Nerd Font **on Windows**. Run
-`./scripts/install-windows-font.sh`, then sign out of Windows and back in;
-newly registered fonts are often invisible to already-running processes.
+`./scripts/install-windows-font.sh`, then sign out of Windows and back in.
+Programs that are already running often cannot see a newly installed font.
 
 ## Terminal
 
 ### The font did not change
 
-Run the font script by hand and read what it says:
+Run the font script yourself and read what it says:
 
 ```bash
 ./scripts/install-windows-font.sh
 ```
 
 Then restart Windows Terminal. This script runs on every `./rebuild.sh`, so if
-the font is wrong, something it printed will say why.
+the font is wrong, something it printed will explain why.
 
-### The colour scheme was never applied
+### The colours were never applied
 
-The theme is seeded **once, by `bootstrap.sh` step 8**, not by `rebuild.sh`.
-Run it by hand:
+Colours are set **once, by `bootstrap.sh` step 8**, not by `rebuild.sh`. Run it
+yourself:
 
 ```bash
 ./scripts/apply-windows-terminal-theme.sh
 ```
 
-Three messages it may print, all of them deliberate:
+Three messages it might print, all on purpose:
 
-- `Windows Terminal settings.json not found` - the terminal has never been
-  launched, so it has not written a config. Launch it once, then re-run.
-- `settings.json is not strict JSON` - your file has comments or trailing
-  commas, which Windows Terminal accepts and `jq` does not. Remove them, or
-  apply `windows/blackpanther.json` by hand through the Settings UI.
+- `Windows Terminal settings.json not found` - you have never opened Windows
+  Terminal, so it has not written its settings. Open it once, then try again.
+- `settings.json is not strict JSON` - your file has comments or extra commas,
+  which Windows Terminal allows and this script cannot read. Remove them, or add
+  the colours by hand.
 - `theme already present; leaving your terminal settings alone` - working as
-  intended. Use `--force` if you really want to overwrite your current look
-  with the committed one.
+  designed. Use `--force` if you really want to replace your current colours.
 
-### I changed the terminal and a rebuild reverted it
+### I changed my terminal and a rebuild undid it
 
-It did not. `rebuild.sh` never writes `settings.json` - only `bootstrap.sh` does,
-once. If your colours changed, either someone ran
-`apply-windows-terminal-theme.sh --force`, or Windows Terminal's own settings
-were edited. See [05-terminal.md](05-terminal.md).
+It did not. `rebuild.sh` never writes that file. Only `bootstrap.sh` does, once.
+If your colours changed, either someone ran
+`apply-windows-terminal-theme.sh --force`, or the change was made in Windows
+Terminal's own Settings. See [05-terminal.md](05-terminal.md).
 
 ### I want my old terminal settings back
 
-The theme script backs up `settings.json` before its single write:
+The script saves a copy before its one and only write:
 
 ```
 <Windows profile>\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\
-    settings.json.pre-dotfiles-wsl.<timestamp>
+    settings.json.pre-dotfiles-wsl.<date and time>
 ```
 
-The merge is additive anyway - other schemes, `profiles.list`, `actions` and
-`keybindings` are never touched - so in most cases only `profiles.defaults` and
-the added scheme differ.
+The merge only adds things anyway. Other colour schemes, your profile list, your
+keyboard shortcuts and your actions are never touched. Usually only
+`profiles.defaults` and the added colours are different.
 
-### The background image is missing
+### The background picture is missing
 
-The image is copied out of the repo to
-`%LOCALAPPDATA%\dotfiles-wsl\blackpanther.jpg` at seed time, because Windows
-Terminal reads `\\wsl.localhost` paths slowly and they break if the distro is
-renamed. If the file is gone, re-seed:
+The picture is copied to `%LOCALAPPDATA%\dotfiles-wsl\blackpanther.jpg` when the
+colours are set. Windows Terminal reads files across the WSL boundary slowly, and
+those paths break if you rename your distro, which is why we copy it. If the file
+is gone, set it up again:
 
 ```bash
 ./scripts/apply-windows-terminal-theme.sh --force
 ```
 
-### Boxes instead of glyphs
+### The background is solid, not see-through
 
-The font is registered but Windows has not picked it up. Sign out and back in.
-Verify it registered:
+`opacity` must be below 100. We set it to 80. If you changed it later, it is in
+Windows Terminal's own Settings. If the terminal is see-through but Neovim is
+not, the theme's `transparency` setting is off. See [06-neovim.md](06-neovim.md).
 
-```bash
-reg.exe query 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts' | grep -i hack
-```
+### The terminal opens in `/mnt/c/...`
 
-### Background is opaque
+The zsh rule in `home.nix` jumps you back to your home folder. If it is not
+happening, you are probably still in bash. Finish the `chsh` step.
 
-`opacity` must be below 100. The seeded defaults set it to 80; if you changed it
-later, it is in Windows Terminal's own settings. If the terminal is translucent
-but Neovim is not, the colourscheme `transparency` flag is false - see
-[06-neovim.md](06-neovim.md).
-
-### Starts in /mnt/c/...
-
-The zsh guard in `home.nix` bounces you to `$HOME`. If it is not firing, you are
-probably still on bash; finish the `chsh` step.
-
-## Devshells
+## Tools per project
 
 ### `direnv: command not found`
 
-`direnv` is in `home.packages` and hooked into zsh by `programs.direnv`. Run
-`./rebuild.sh` and open a new shell - the hook is written into the generated
-`.zshrc`, which an already-running shell has not re-read.
+`direnv` is in `home.packages` and connected to zsh by `programs.direnv`. Run
+`./rebuild.sh` and open a new shell. The connection is written into your
+`.zshrc`, which a shell that is already open has not read.
 
-### Nothing happens when I cd into the project
+### Nothing happens when I walk into the project
 
-direnv refuses to run an `.envrc` it has not been told to trust:
+direnv refuses to run an `.envrc` file until you allow it:
 
 ```bash
 direnv allow
 ```
 
-It re-asks whenever the file changes. If you still see nothing, check the
-directory actually has both `.envrc` and `flake.nix`.
+It asks again whenever the file changes. If still nothing happens, check the
+folder really has both `.envrc` and `flake.nix`.
 
-### Entering the directory is slow every time
+### Walking into the folder is slow every time
 
-`nix-direnv.enable` is what caches the evaluated environment; without it plain
-direnv re-evaluates the whole flake on every `cd`. Confirm it is set in
-`home.nix`, rebuild, then `direnv reload`.
+`nix-direnv.enable` is what remembers the result. Without it, plain direnv
+rebuilds everything on every visit. Check it is set in `home.nix`, rebuild, then
+run `direnv reload`.
 
-### My project toolchain disappeared after garbage collection
+### My project tools disappeared after a cleanup
 
-nix-direnv keeps a GC root under the project's `.direnv/`. If that directory was
-deleted, `nix-collect-garbage` had nothing to protect the toolchain with.
-`direnv reload` rebuilds it.
+nix-direnv marks the tools as in use inside the project's `.direnv/` folder. If
+that folder was deleted, `nix-collect-garbage` had nothing telling it to keep
+them. Run `direnv reload` to build it again.
 
-### `uv` downloaded its own Python instead of using the pinned one
+### `uv` downloaded its own Python instead of the one I picked
 
-The template sets `UV_PYTHON_DOWNLOADS=never` precisely to stop this. If you
-removed it, or overrode `UV_PYTHON`, uv falls back to fetching its own CPython
-and the Nix pin becomes decorative. See [11-devshells.md](11-devshells.md).
+The template sets `UV_PYTHON_DOWNLOADS=never` to stop exactly this. If you
+removed that line, or changed `UV_PYTHON`, uv fetches its own Python and the
+version you chose stops mattering. See [11-devshells.md](11-devshells.md).
 
-### A prebuilt binary fails with "no such file or directory" but the file exists
+### A downloaded program says "no such file or directory" but the file is there
 
-Classic FHS problem: the binary wants a dynamic loader at
-`/lib64/ld-linux-x86-64.so.2`, which does not exist on a Nix-managed path. Wrap
-it in `pkgs.buildFHSEnv`, or install it with `apt` and accept it is outside the
-reproducible set.
+The program is looking for a loader at `/lib64/ld-linux-x86-64.so.2`, which does
+not exist on a Nix-managed system. Wrap it with `pkgs.buildFHSEnv`, or install it
+with `apt` and accept that it sits outside the repeatable part.
 
 ## Neovim
 
-### Yank does not reach Windows apps
+### Copying does not reach Windows programs
 
-Check the provider:
+Check what Neovim is using:
 
 ```
 :checkhealth provider
 ```
 
-It should report `WslClipboard`. If not, `vim.fn.has('wsl')` returned 0 - confirm
-with `:echo has('wsl')`.
+It should say `WslClipboard`. If not, Neovim did not detect WSL. Confirm with
+`:echo has('wsl')`.
 
-Test the underlying binaries directly:
+Test the Windows program directly:
 
 ```bash
 echo hello | clip.exe        # then paste anywhere in Windows
@@ -325,30 +313,30 @@ echo hello | clip.exe        # then paste anywhere in Windows
 
 ### Pasted lines end with `^M`
 
-The CR strip in the paste command is missing or mangled. The `` `r `` sequence
-uses a PowerShell backtick escape and is easy to break when editing.
+The part that removes the extra character is missing or broken. The `` `r ``
+sequence uses a PowerShell backtick and is easy to damage when editing.
 
-### Paste is noticeably slow
+### Pasting is slow
 
-Each paste launches `powershell.exe` (~100ms). That is the cost of
-`cache_enabled = 0`, which is what keeps Neovim from serving stale clipboard
-content. Installing `win32yank` is the usual alternative if it bothers you.
+Each paste starts `powershell.exe`, which takes about 100ms. That is the price
+of `cache_enabled = 0`, which is what stops Neovim giving you old clipboard text.
+Installing `win32yank` is the usual alternative if it bothers you.
 
 ### `gd` does nothing
 
-No LSP server is configured; this config deliberately leaves LSP out.
+No language server is set up. This config leaves that out on purpose.
 
 ### Plugins did not install
 
-lazy.nvim clones on first launch and needs network plus git. Run `:Lazy` to see
-the state, `:Lazy sync` to force.
+lazy.nvim downloads them the first time Neovim starts, and needs both network and
+git. Run `:Lazy` to see what happened, or `:Lazy sync` to try again.
 
 ## herdr
 
 ### `herdr: command not found`
 
-Not in the profile yet - run `./rebuild.sh`. Then confirm it came from Nix, not
-from an upstream install script:
+Not installed yet. Run `./rebuild.sh`. Then check it came from Nix and not from
+their install script:
 
 ```bash
 which herdr        # expect /nix/store/... or ~/.nix-profile/bin/herdr
@@ -356,68 +344,67 @@ which herdr        # expect /nix/store/... or ~/.nix-profile/bin/herdr
 
 ### `hash mismatch in fixed-output derivation`
 
-You bumped `version` in `modules/herdr.nix` without updating the hashes. The
-error prints both expected and actual; see
+You changed `version` in `modules/herdr.nix` without changing the fingerprints.
+The error shows both the expected and the real one. See
 [03-modules-herdr-nix.md](03-modules-herdr-nix.md).
 
-### Escape behaves oddly in Neovim inside herdr
+### Escape behaves strangely in Neovim inside herdr
 
-Usually mouse reporting. `vim_config.lua` sets `o.mouse = ''` for exactly this
-reason; if you enabled the mouse, that is the cause.
+Usually the mouse. `vim_config.lua` sets `o.mouse = ''` for exactly this reason.
+If you turned the mouse back on, that is the cause.
 
-### Sessions vanish after closing the terminal
+### Sessions disappear after closing the terminal
 
-They should not - the server is a Linux process independent of the terminal. But
-`wsl --shutdown`, or Windows fast startup, stops the whole VM and everything in
-it. Check for leftover state with `herdr status server`.
+They should not. herdr runs as a Linux program, separate from the terminal
+window. But `wsl --shutdown`, or Windows fast startup, stops the whole Linux
+machine and everything inside it. Check with `herdr status server`.
 
-## Agents
+## AI tools
 
 ### `claude` runs an old version
 
-Check which one is winning:
+Find out which copy is winning:
 
 ```bash
 command -v claude && claude --version
 ```
 
-If it resolves inside `/nix/store`, something added `claude-code` back to
-`home.packages`. Remove it - the Nix copy is frozen at `flake.lock` and sits
-ahead of the self-updating `~/.local/bin/claude` on `PATH`. See
-[08-agents.md](08-agents.md).
+If the answer is inside `/nix/store`, someone added `claude-code` back to
+`home.packages`. Remove it. The Nix copy is frozen at whatever `flake.lock` says
+and sits ahead of the self-updating one. See [08-agents.md](08-agents.md).
 
-### An agent ignores `AGENTS.md`
+### A tool ignores `AGENTS.md`
 
-Claude Code reads `~/.claude/CLAUDE.md`, which this repo does not manage - see
-[08-agents.md](08-agents.md). For the agents it does manage, check the symlink
-resolves:
+Claude Code reads `~/.claude/CLAUDE.md`, which this repo does not manage. See
+[08-agents.md](08-agents.md). For the tools it does manage, check the link
+works:
 
 ```bash
 ls -l ~/.codex/AGENTS.md
 readlink -f ~/.codex/AGENTS.md
 ```
 
-A dangling link means `~/.dotfiles` does not point at the repo. Run
-`./rebuild.sh`, which recreates it.
+A broken link means `~/.dotfiles` is not pointing at the repo. Run
+`./rebuild.sh`, which makes it again.
 
 ## General
 
-### Everything is dangling after moving the repo
+### Everything broke after I moved the repo
 
-Every symlink resolves through `~/.dotfiles`. Re-point it:
+Every link goes through `~/.dotfiles`. Point it at the new place:
 
 ```bash
 cd /new/path/to/dotfiles-wsl && ./rebuild.sh
 ```
 
-### Roll back a bad rebuild
+### Undo a bad rebuild
 
 ```bash
-home-manager generations              # list, newest first
+home-manager generations              # newest first
 /nix/store/<hash>-home-manager-generation/activate
 ```
 
-### Start completely over
+### Start again from nothing
 
 ```bash
 nix run home-manager/release-26.05 -- uninstall

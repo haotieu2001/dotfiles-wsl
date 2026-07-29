@@ -1,19 +1,19 @@
 # 06 - Neovim
 
-A modular lazy.nvim config. The one WSL-specific addition is the clipboard
-bridge.
+A Neovim setup split into small files, managed by lazy.nvim. The one thing added
+just for WSL is copy and paste.
 
-`home.nix` links the whole directory with `mkOutOfStoreSymlink`, so every file
-below is live-edited. No rebuild after changing any of them.
+`home.nix` links the whole folder, so every file below is edited in place. You
+never need to rebuild after changing one.
 
 ```
 home/.config/nvim/
-├── init.lua                    # entry point, three requires
+├── init.lua                    # the start, three lines
 └── lua/
-    ├── vim_config.lua          # options + WSL clipboard
-    ├── plugin.lua              # lazy.nvim bootstrap
-    ├── keys.lua                # personal keybinds
-    └── plugins/                # one file per concern, auto-loaded
+    ├── vim_config.lua          # settings + WSL copy and paste
+    ├── plugin.lua              # lazy.nvim setup
+    ├── keys.lua                # my own keys
+    └── plugins/                # one file per topic, loaded automatically
         ├── colorscheme.lua
         ├── navigation.lua
         ├── git.lua
@@ -30,11 +30,11 @@ require('plugin')
 require('keys')
 ```
 
-Order matters. `require('x')` looks for `lua/x.lua` on the runtime path.
+The order matters. `require('x')` looks for `lua/x.lua`.
 
-`vim_config` runs first because it sets `vim.g.mapleader`, and lazy.nvim resolves
-`<leader>` in plugin keymaps at load time. Setting the leader after loading
-plugins is the classic reason `<leader>` keybinds silently do nothing.
+`vim_config` runs first because it sets `vim.g.mapleader`. lazy.nvim works out
+what `<leader>` means when it loads plugins, so setting the leader key *after*
+loading them is the usual reason `<leader>` shortcuts quietly do nothing.
 
 ---
 
@@ -45,73 +45,76 @@ local o = vim.opt
 vim.g.mapleader = ' '          -- space is the leader key
 ```
 
-Space as the prefix for personal keybinds.
+Space is the key you press first for your own shortcuts.
 
 ```lua
 o.expandtab = true             -- spaces, not tabs
-o.shiftwidth = 2               -- 2 spaces per indent level
+o.shiftwidth = 2               -- 2 spaces per indent
 o.number = true
 o.relativenumber = true
 ```
 
-`number` plus `relativenumber` gives the hybrid gutter explained at 20:22: the
-cursor line shows its absolute number, every other line shows its distance. That
-distance is directly usable as a motion count, so a line marked `5` above the
-cursor is `5k` away.
+Turning on both `number` and `relativenumber` gives you a mixed line-number
+column: the line you are on shows its real number, and every other line shows how
+far away it is. That distance is exactly the number you type to jump there, so a
+line marked `5` above the cursor is `5k` away.
 
 ```lua
-o.ignorecase = true            -- search is case-insensitive by default
-o.smartcase = true             -- case-sensitive only if i type a capital
+o.ignorecase = true            -- search ignores capitals
+o.smartcase = true             -- unless i type a capital
 ```
 
-Together: `/foo` matches any case, `/Foo` matches only `Foo`. `smartcase`
-requires `ignorecase` to have any effect.
+Together: `/foo` finds any capitalisation, `/Foo` finds only `Foo`. `smartcase`
+does nothing unless `ignorecase` is also on.
 
 ```lua
-o.clipboard = 'unnamedplus'    -- share the system clipboard
+o.clipboard = 'unnamedplus'    -- use the system clipboard
 ```
 
-Makes every yank and put use the `+` register, i.e. the system clipboard, so no
-`"+y` prefix is needed. On WSL this is not sufficient by itself; see below.
+Makes every copy and paste use the system clipboard, so you do not have to type
+`"+y`. On WSL this alone is not enough. See below.
 
 ```lua
-o.scrolloff = 16               -- keep cursor away from the screen edge
-o.undofile = true              -- persistent undo across sessions
+o.scrolloff = 16               -- keep the cursor away from the edge
+o.undofile = true              -- remember undo history after closing
 ```
 
-`scrolloff` keeps at least 16 lines of context above and below the cursor.
-`undofile` writes undo history to disk, so undo survives closing the file.
+`scrolloff` keeps at least 16 lines visible above and below the cursor.
+`undofile` saves undo history to disk, so you can still undo after closing a
+file.
 
 ```lua
 o.mouse = ''                   -- no mouse in nvim
 ```
 
-Disables mouse handling. Deliberate: with mouse reporting off, herdr keeps host
-mouse capture off, and `Escape` is not swallowed by mouse-sequence parsing.
+Turns the mouse off. On purpose: with mouse reporting off, herdr can leave mouse
+tracking off too, and then `Escape` is not eaten while the terminal tries to work
+out a mouse movement.
 
-### The WSL clipboard bridge
+### Copy and paste on WSL
 
 ```lua
 if vim.fn.has('wsl') == 1 then
 ```
 
-Neovim's own WSL detection, so the same config still works if you use it on a
-real Linux machine.
+Neovim's own check for WSL, so this same setup still works on a real Linux
+machine.
 
 ```lua
   local paste = 'powershell.exe -NoLogo -NoProfile -c '
     .. '[Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))'
 ```
 
-The read side. Reading is harder than writing because Windows stores clipboard
-text with CRLF line endings, and every pasted line would arrive with a trailing
-`^M` if left alone.
+This is the reading half, and it is harder than writing. Windows stores copied
+text with an extra invisible character at the end of every line. Without removing
+it, every pasted line would arrive with a stray `^M`.
 
-- `-NoProfile` skips your PowerShell profile, which can cost hundreds of
-  milliseconds per paste.
-- `[Console]::Out.Write` writes raw, unlike `Write-Output` which appends a newline.
-- `` .replace("`r", "") `` strips the CR. The backtick is PowerShell's escape
-  character, so `` `r `` is a carriage return.
+- `-NoProfile` skips your PowerShell startup file, which can add a few hundred
+  milliseconds to every paste.
+- `[Console]::Out.Write` writes the text exactly, unlike `Write-Output` which
+  adds a newline.
+- `` .replace("`r", "") `` removes the extra character. The backtick is
+  PowerShell's escape symbol, so `` `r `` means "carriage return".
 
 ```lua
   vim.g.clipboard = {
@@ -123,21 +126,21 @@ text with CRLF line endings, and every pasted line would arrive with a trailing
 end
 ```
 
-Registers a custom clipboard provider. `clip.exe` is a Windows binary that reads
-stdin into the clipboard; WSL puts Windows executables on `PATH`, so it is
-callable directly.
+Tells Neovim how to reach the clipboard. `clip.exe` is a Windows program that
+puts whatever you send it on the clipboard. WSL makes Windows programs available
+from Linux, so we can call it directly.
 
-Both `+` (the clipboard) and `*` (the X primary selection) map to the same
-place, since Windows has only one clipboard.
+Linux normally has two clipboards, `+` and `*`. Windows has only one, so both
+point at the same place.
 
-`cache_enabled = 0` matters. Caching would let Neovim reuse the last value it
-wrote instead of shelling out, but then copying something in a Windows
-application and pasting into Neovim would give you stale text. The cost is one
-`powershell.exe` launch per paste, roughly 100ms - noticeable, and the reason
-some people install `win32yank` instead. This repo prefers zero extra
-dependencies.
+`cache_enabled = 0` matters. With caching on, Neovim would reuse the last thing
+*it* copied instead of asking Windows. Then copying something in a Windows
+program and pasting into Neovim would give you old text. The cost of turning it
+off is one PowerShell start per paste, about 100ms. That is noticeable, and it is
+why some people install `win32yank` instead. This repo prefers not to add another
+program.
 
-Verify with `:checkhealth provider` - it should report `WslClipboard`.
+Check it works with `:checkhealth provider`. It should say `WslClipboard`.
 
 ---
 
@@ -153,16 +156,15 @@ vim.opt.rtp:prepend(lazypath)
 require('lazy').setup('plugins')
 ```
 
-The standard lazy.nvim bootstrap.
+The standard way to install lazy.nvim.
 
 - `stdpath('data')` is `~/.local/share/nvim`, so plugins live outside this repo
-  and are not committed.
-- `--filter=blob:none` is a blobless clone: history without file contents,
-  fetched on demand. Faster and smaller.
-- `prepend` puts lazy.nvim at the front of the runtime path so it can be
-  `require`d immediately.
-- `setup('plugins')` loads **every** file in `lua/plugins/`, which is why adding
-  a plugin means adding a file and nothing else.
+  and are not saved in git.
+- `--filter=blob:none` downloads the history without the file contents, and
+  fetches those only when needed. Faster and smaller.
+- `prepend` puts lazy.nvim first, so it can be loaded right away.
+- `setup('plugins')` loads **every** file in `lua/plugins/`. That is why adding a
+  plugin means adding a file and nothing else.
 
 ---
 
@@ -172,26 +174,26 @@ The standard lazy.nvim bootstrap.
 vim.keymap.set('n', '<Esc>', ':w<CR>', { desc = 'Save' })
 ```
 
-Escape saves. The reasoning at 31:02: leaving insert mode and wanting to save are
-almost always the same moment.
+Escape saves. The idea: leaving insert mode and wanting to save are almost
+always the same moment.
 
 ```lua
 vim.keymap.set('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 ```
 
-`gg` top, `V` linewise visual, `G` bottom.
+`gg` goes to the top, `V` starts selecting whole lines, `G` goes to the bottom.
 
 ```lua
 vim.cmd([[ xnoremap <expr> p 'pgv"'.v:register.'y' ]])
 ```
 
-The counterintuitive one from 32:07. By default, pasting over a visual selection
-copies the replaced text into the unnamed register, so a second paste yields the
-text you just overwrote instead of the original.
+This one is surprising but useful. Normally, pasting over selected text puts the
+*replaced* text on the clipboard. So pasting a second time gives you the text you
+just wrote over, instead of what you originally copied.
 
-This remaps visual-mode `p` to paste, reselect (`gv`), and yank back into the
-register it came from, so the register keeps its original content and repeated
-pastes behave as you expect.
+This changes paste-over-selection to: paste, select it again (`gv`), then copy it
+back into the place it came from. The clipboard keeps its original contents, and
+pasting repeatedly does what you expect.
 
 ---
 
@@ -206,21 +208,21 @@ return {
     name = 'rose-pine',
 ```
 
-A lazy.nvim spec. `lazy = false` loads at startup, `priority = 1000` loads it
-before other plugins so no window is drawn with default colors first. `name`
-sets the `require` path, since the repo is `rose-pine/neovim`.
+`lazy = false` loads it at startup. `priority = 1000` loads it before other
+plugins, so you never see a flash of default colours first. `name` sets what you
+type in `require`, since the project is called `rose-pine/neovim`.
 
 ```lua
         transparency = string.find(vim.uv.os_uname().release, 'WSL') ~= nil,
 ```
 
-On WSL the kernel release string looks like `6.18.x-microsoft-standard-WSL2`,
-so matching `WSL` is sufficient. A config that also had to run on macOS would
-need a Darwin branch here as well.
+On WSL the system version string looks like `6.18.x-microsoft-standard-WSL2`, so
+looking for `WSL` is enough. A setup that also had to run on macOS would need an
+extra check here.
 
-Transparency makes Neovim skip painting a background, letting the terminal's
-opacity and Acrylic backdrop show through. Without it the editor is an opaque
-rectangle and the terminal blur is invisible behind it.
+Transparency stops Neovim painting its own background, so the terminal's
+see-through effect shows through. Without it, the editor is a solid rectangle and
+the blurred background is hidden behind it.
 
 ```lua
       vim.cmd('colorscheme rose-pine')
@@ -229,8 +231,9 @@ rectangle and the terminal blur is invisible behind it.
       vim.api.nvim_set_hl(0, 'SnacksPickerDir', { fg = palette.subtle })
 ```
 
-Applies the scheme, then fixes one readability detail: the directory path in the
-Snacks picker is too dim by default, so it is reset to the palette's `subtle`.
+Applies the colours, then fixes one small readability problem: folder paths in
+the file picker are too dim by default, so we set them to the theme's own
+`subtle` colour.
 
 ---
 
@@ -244,12 +247,12 @@ Snacks picker is too dim by default, so it is reset to the palette's `subtle`.
   },
 ```
 
-oil.nvim, the 26:15 chapter. It presents a directory as an ordinary editable
-buffer: rename by editing a line, delete with `dd`, copy with `yy` then `p`, and
-`:w` applies the changes to the filesystem.
+oil.nvim shows a folder as an ordinary editable file. Rename by editing a line,
+delete with `dd`, copy with `yy` then `p`, and `:w` applies your changes to the
+real files.
 
-Declaring `keys` makes lazy.nvim load the plugin on first use of that key rather
-than at startup.
+Listing `keys` tells lazy.nvim to load the plugin the first time you press that
+key, instead of at startup.
 
 ```lua
   {
@@ -263,9 +266,9 @@ than at startup.
     },
 ```
 
-Snacks is a collection; `opts` selects only the three pieces used here. The
-picker is the fuzzy finder, the notifier replaces the message area, and `input`
-replaces `vim.ui.input` prompts.
+Snacks is a bundle of many small tools. `opts` turns on only the three we use:
+the picker for finding things, the notifier for messages, and `input` for
+prompts.
 
 ```lua
     keys = {
@@ -276,11 +279,12 @@ replaces `vim.ui.input` prompts.
     },
 ```
 
-`<space>f` files, `<space>s` grep, `<space>b` buffers, `gd` go to definition.
-The grep picker uses `ripgrep`, which is why it is in `home.packages`.
+`<space>f` finds files, `<space>s` searches inside them, `<space>b` lists open
+files, `gd` jumps to where something is defined. The search uses `ripgrep`, which
+is why it is in `home.packages`.
 
-`gd` needs a running LSP server to return anything. This config deliberately
-does not set up LSP.
+`gd` needs a language server running to find anything. This setup does not
+include one, on purpose.
 
 ---
 
@@ -294,8 +298,8 @@ does not set up LSP.
   },
 ```
 
-A magit-style git UI on `<space>g`, for reviewing diffs and staging hunks. This
-is the main reason to open Neovim while working with agents.
+A full git screen on `<space>g`, for reading changes and choosing what to commit.
+This is the main reason to open Neovim while AI tools are working.
 
 ```lua
   {
@@ -305,10 +309,10 @@ is the main reason to open Neovim while working with agents.
   },
 ```
 
-Change markers in the gutter plus inline blame for the current line.
+Shows changed lines in the left margin, and who last changed the line you are on.
 
-`event = 'BufWinEnter'` is the lazy-loading primitive explained at 28:53: do not
-load this until a buffer is actually displayed in a window. Startup stays fast.
+`event = 'BufWinEnter'` means: do not load this until a file is actually shown on
+screen. That keeps startup fast.
 
 ---
 
@@ -322,15 +326,16 @@ load this until a buffer is actually displayed in a window. Startup stays fast.
   },
 ```
 
-Press `<space>` and pause: a popup lists every key that can follow. `config = true`
-means "call `require('which-key').setup({})` with defaults".
+Press `<space>` and wait: a small window lists every key you can press next.
+`config = true` means "set it up with the default options".
 
-This is why every keymap above passes `desc` - which-key displays those strings.
+This is why every shortcut above includes a `desc`. which-key shows that text.
 
 ---
 
 ## Plugin versions
 
-lazy.nvim writes resolved commits to `lazy-lock.json`. This repo does not ship
-one, so plugins float. If you want them pinned as tightly as your Nix packages,
-commit `home/.config/nvim/lazy-lock.json` after running `:Lazy sync`.
+lazy.nvim writes the exact versions it installed into `lazy-lock.json`. This repo
+does not include that file, so plugins update freely. If you want them locked as
+firmly as your Nix packages, run `:Lazy sync` and then commit
+`home/.config/nvim/lazy-lock.json`.
