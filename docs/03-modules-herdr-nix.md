@@ -1,12 +1,13 @@
 # 03 - `modules/herdr.nix`
 
-herdr is the agent-aware terminal multiplexer. It is not in nixpkgs, so this
-file packages the upstream release binary rather than reaching for a second
-package manager to install it.
+herdr lets you run several terminals in one window, and it knows about AI coding
+tools. It is not in nixpkgs, so this file wraps the ready-made program that the
+authors publish.
 
-The upstream install path is `curl -fsSL https://herdr.dev/install.sh | sh`,
-which fetches whatever "latest" happens to be at the time. That is the opposite
-of what this repo is for, so we pin a version and verify a hash instead.
+Their normal install command is
+`curl -fsSL https://herdr.dev/install.sh | sh`. That grabs whatever the newest
+version is today, which is the opposite of what this repo wants. So we pick one
+version and check the download against a fingerprint instead.
 
 ## Line by line
 
@@ -14,20 +15,21 @@ of what this repo is for, so we pin a version and verify a hash instead.
 { lib, stdenvNoCC, fetchurl }:
 ```
 
-A package function. `pkgs.callPackage` in `home.nix` inspects these parameter
-names and supplies each one from the package set.
+A package is a function. `pkgs.callPackage` in `home.nix` reads these argument
+names and fills each one in from the package set.
 
-`stdenvNoCC` is the standard build environment **without a C compiler**. We are
-installing a prebuilt binary, not compiling anything, so pulling in a whole
-toolchain would only slow the build down.
+`stdenvNoCC` is the normal build setup **without a C compiler**. We are
+installing a ready-made program, not building one, so pulling in a compiler
+would only make things slower.
 
 ```nix
 let
   version = "0.7.5";
 ```
 
-The pinned version. Bumping this alone is not enough; the hashes below must
-change with it, and Nix will refuse the build if they do not match.
+The version we install. Changing this number alone is not enough. The
+fingerprints below must change too, and Nix refuses to build if they do not
+match.
 
 ```nix
   sources = {
@@ -42,10 +44,12 @@ change with it, and Nix will refuse the build if they do not match.
   };
 ```
 
-One entry per architecture, since upstream ships separate binaries. The hash is
-SRI format (`sha256-` plus base64) and is the integrity guarantee: if the
-download is corrupted, or the release asset is ever replaced with different
-bytes, the build fails loudly instead of silently installing something else.
+One entry per kind of processor, because the authors publish a separate file for
+each.
+
+The `hash` is a fingerprint of the download. It is what keeps you safe: if the
+download is damaged, or if someone replaces the published file with a different
+one, the build stops with an error instead of quietly installing something else.
 
 ```nix
   system = stdenvNoCC.hostPlatform.system;
@@ -54,8 +58,9 @@ bytes, the build fails loudly instead of silently installing something else.
 in
 ```
 
-Selects the right entry. The `or (throw ...)` turns an unsupported platform into
-a readable message rather than a bare `attribute missing` error.
+Picks the right entry for your computer. The `or (throw ...)` part turns an
+unsupported processor into a clear message, instead of a confusing
+`attribute missing` error.
 
 ```nix
 stdenvNoCC.mkDerivation {
@@ -65,15 +70,16 @@ stdenvNoCC.mkDerivation {
   src = fetchurl { inherit (source) url hash; };
 ```
 
-`inherit (source) url hash` is shorthand for `url = source.url; hash = source.hash;`.
-`fetchurl` downloads and verifies against the hash before the build starts.
+`inherit (source) url hash` is short for
+`url = source.url; hash = source.hash;`. `fetchurl` downloads the file and checks
+the fingerprint before anything else runs.
 
 ```nix
   dontUnpack = true;
 ```
 
-The default build would try to extract `src` as an archive. Here `src` is a bare
-executable, so unpacking is skipped.
+Normally Nix would try to unzip `src`. Here `src` is the program itself, not an
+archive, so we skip that.
 
 ```nix
   installPhase = ''
@@ -83,17 +89,17 @@ executable, so unpacking is skipped.
   '';
 ```
 
-The entire build. `install -D` creates `$out/bin/` as needed, and `m755` makes
-the result executable. `$out` is the package's store path.
+This is the whole build. `install -D` creates the `$out/bin/` folder if needed,
+and `m755` makes the file runnable. `$out` is where this package lives in the
+Nix store.
 
-The `runHook` calls are convention: they let anyone override the package with
-`preInstall` / `postInstall` additions without rewriting this phase.
+The two `runHook` lines are a convention. They let someone add extra steps
+before or after, without rewriting this part.
 
-**No `autoPatchelfHook`.** Normally a downloaded Linux binary expects an ELF
-interpreter at `/lib64/ld-linux-x86-64.so.2`, which does not exist on NixOS-style
-systems, and needs patching. herdr's releases are `static-pie` linked, with no
-interpreter and no `NEEDED` entries at all, so the binary runs unmodified. You
-can confirm this yourself:
+**We do not use `autoPatchelfHook`.** Usually a downloaded Linux program expects
+a loader at `/lib64/ld-linux-x86-64.so.2`, which does not exist on a
+Nix-managed system, so it has to be patched. herdr is built in a way that needs
+no loader at all, so it runs as-is. You can check for yourself:
 
 ```bash
 file $(which herdr)
@@ -111,33 +117,38 @@ file $(which herdr)
 }
 ```
 
-Metadata. `platforms` is derived from `sources` so the two cannot drift apart.
-`sourceProvenance = binaryNativeCode` is an honest declaration that this is a
-prebuilt binary rather than something built from source, which tooling uses to
-flag packages that were not compiled from auditable inputs.
+Information about the package. `platforms` is worked out from `sources`, so the
+two lists can never disagree.
 
-## Upgrading herdr
+`sourceProvenance = binaryNativeCode` is an honest note that this is a
+ready-made program, not something built from source code we can read. Tools use
+that to point out packages nobody has checked.
+
+## Updating herdr
 
 ```bash
-# 1. see what is current
+# 1. see the newest version
 curl -s https://herdr.dev/latest.json | jq -r .version
 
-# 2. bump `version` in this file, then get each hash
+# 2. change `version` in this file, then get each fingerprint
 nix store prefetch-file --json \
   https://github.com/ogulcancelik/herdr/releases/download/v<NEW>/herdr-linux-x86_64 \
   | jq -r .hash
 
-# 3. paste the hashes in, then
+# 3. paste the fingerprints in, then
 ./rebuild.sh
 ```
 
-If you skip step 2, the build fails with `hash mismatch in fixed-output
-derivation`, showing both the expected and actual values. Copying the "got"
-value in is a valid way to do this, as long as you trust the download.
+If you skip step 2, the build stops with
+`hash mismatch in fixed-output derivation` and shows both the expected and the
+real fingerprint. Copying the "got" value in is fine, as long as you trust where
+the file came from.
 
-## Why not just use the install script
+## Why not just use their install script
 
-`herdr update` and the upstream installer both write into `~/.local/bin`, which
-sits outside Nix's control. You would then have two herdrs on `PATH` and no
-record of which one you are running. Keeping it in Nix means `flake.lock` plus
-this file fully describe your herdr, and a fresh machine reproduces it exactly.
+Both `herdr update` and their installer write into `~/.local/bin`, which Nix
+does not manage. You would then have two copies of herdr, with no record of
+which one you are running.
+
+Keeping it in Nix means `flake.lock` and this file describe your herdr
+completely, and a new computer gets exactly the same one.

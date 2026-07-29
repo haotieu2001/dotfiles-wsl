@@ -1,39 +1,39 @@
 # 02 - `home.nix`
 
-This file is the whole environment. A NixOS or nix-darwin setup splits its
-config between `configuration.nix` (system level) and `home.nix` (user level).
-Here there is no system level, so everything lands in one file.
+This one file holds the whole setup. A NixOS or nix-darwin machine splits its
+settings between `configuration.nix` for the system and `home.nix` for the user.
+Here there is no system part, so everything is in one place.
 
-## Header
+## The top of the file
 
 ```nix
 { config, pkgs, user, ... }:
 ```
 
-Module arguments. `config` is the evaluated configuration (used below to read
-`home.homeDirectory` and to reach `config.lib.file.mkOutOfStoreSymlink`), `pkgs`
-is the package set from `flake.nix`, and `user` arrives via `extraSpecialArgs`.
+Three things get passed in. `config` is the finished setup, which we read later
+to find your home folder. `pkgs` is the package set from `flake.nix`. `user` is
+your username, sent down by `extraSpecialArgs`.
 
 ```nix
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
 ```
 
-The stable path every symlink is written against. Note it points at
-`~/.dotfiles`, **not** at wherever you happened to clone the repo. Both
-`bootstrap.sh` and `rebuild.sh` create that symlink before doing anything else.
-It means you can move or rename the clone and nothing breaks.
+The path that every file link points at. Note it points at `~/.dotfiles`, **not**
+at wherever you cloned the repo. Both `bootstrap.sh` and `rebuild.sh` create that
+link before anything else. This way you can move or rename the folder and nothing
+breaks.
 
 ```nix
   herdr = pkgs.callPackage ./modules/herdr.nix { };
 in
 ```
 
-`callPackage` reads the function in `modules/herdr.nix` and automatically
-supplies the arguments it asks for (`lib`, `stdenvNoCC`, `fetchurl`) from
-`pkgs`. Explained in [03-modules-herdr-nix.md](03-modules-herdr-nix.md).
+`callPackage` reads the file `modules/herdr.nix` and fills in the arguments it
+asks for (`lib`, `stdenvNoCC`, `fetchurl`) from `pkgs`. See
+[03-modules-herdr-nix.md](03-modules-herdr-nix.md).
 
-## Identity
+## Who you are
 
 ```nix
   home.username = user;
@@ -41,13 +41,13 @@ supplies the arguments it asks for (`lib`, `stdenvNoCC`, `fetchurl`) from
   home.stateVersion = "26.05";
 ```
 
-`homeDirectory` is `/home/<user>` on Linux, where macOS uses `/Users/<user>`.
-Getting this wrong makes every symlink land in the wrong place.
+On Linux your home folder is `/home/<name>`. On macOS it would be
+`/Users/<name>`. Get this wrong and every file link lands in the wrong place.
 
-`stateVersion` pins default values that home-manager may change in future
-releases, so an upgrade cannot silently alter behavior you depend on. Set it
-once, to the release you first installed with, then never touch it. It is not a
-version to keep current.
+`stateVersion` locks in default values that home-manager might change in a
+future release. It stops an upgrade from quietly changing how things behave.
+Set it once, to the release you first installed, and never touch it again. It is
+**not** a version number to keep up to date.
 
 ## Packages
 
@@ -56,7 +56,7 @@ version to keep current.
     ripgrep   # fast search
     fd        # fast find
     fzf       # fuzzy finder
-    jq        # json on the command line
+    jq        # read json on the command line
     lazygit
     neovim
     git
@@ -71,56 +71,53 @@ version to keep current.
 
 `with pkgs;` lets you write `ripgrep` instead of `pkgs.ripgrep`.
 
-**What belongs in this list.** Tools you want on *every* machine you own. What
-does not belong: a version of Python or Node that only one project needs. Those
-go in that project's own flake, so the pin travels with the code instead of
-living on one laptop. See [11-devshells.md](11-devshells.md).
+**What belongs in this list:** tools you want on *every* computer you own.
 
-`nodejs_24` and `uv` are the general-purpose ones - the versions you want when
-you run `npx` or `uv tool install` outside any project. Before they were here
-they came from nvm and a hand-downloaded binary in `~/.local/bin`, neither of
-which survived a new machine.
+**What does not:** a version of Python or Node that only one project needs.
+Those go in that project's own flake, so the version travels with the code
+instead of living on one laptop. See [11-devshells.md](11-devshells.md).
 
-`direnv` does nothing useful on its own; the `programs.direnv` block below is
-what hooks it into zsh.
+`nodejs_24` and `uv` are the general ones, for when you run `npx` or
+`uv tool install` outside any project. Before, Node came from nvm and uv was a
+file downloaded by hand into `~/.local/bin`. Neither survived a new computer.
 
-One deliberate exception to "install it with Nix": `claude-code`. It ships a
-self-updater, and a read-only Nix store is the wrong home for anything that
-updates itself - see [08-agents.md](08-agents.md).
+`direnv` does nothing by itself. The `programs.direnv` block further down is
+what connects it to zsh.
 
-`jq` is here because it is the standard way to handle JSON on the command line,
-and because `apply-windows-terminal-theme.sh` uses it to merge the terminal
-theme.
+`gh` fills a gap that an SSH key cannot. An SSH key only proves who you are for
+git itself: clone, fetch, push. Pull requests are not git. Making and merging
+them goes through GitHub's web API, which does not accept SSH keys at all.
+`gh auth login` gets a token and saves it in `~/.config/gh/hosts.yml`.
 
-`gh` is worth calling out because it covers a gap SSH cannot. An SSH key
-authenticates git transport only: clone, fetch, push. Pull requests are not git
-- creating, reviewing and merging them goes through GitHub's REST API, which
-does not accept SSH keys. `gh auth login` mints an API token and stores it in
-`~/.config/gh/hosts.yml`.
+Leave the token there. Do not put `export GH_TOKEN=...` in your shell settings.
+An exported token can be read by every program you start, including AI tools.
+The `gh` file cannot.
 
-Keep it there rather than exporting `GH_TOKEN` from your shell config. An
-exported token is readable in the environment of every process you launch,
-agents included; the `gh` config file is not.
+`jq` is here because it is the normal way to read JSON on the command line, and
+because `apply-windows-terminal-theme.sh` uses it to merge your terminal
+colours.
 
-`git` is listed even though `bootstrap.sh` requires git to clone the repo. That
-bootstrap git comes from apt; this one is Nix-managed and pinned, and takes
-precedence on `PATH` after the first switch.
+One thing is left out on purpose: `claude-code`. It updates itself, and the Nix
+store is read-only, so the two do not mix. See [08-agents.md](08-agents.md).
 
-Search for more at [search.nixos.org](https://search.nixos.org/packages).
+`git` is in the list even though you need git to clone this repo. That first git
+comes from apt. This one comes from Nix, is locked to a version, and wins once
+you have installed.
+
+Search for more packages at [search.nixos.org](https://search.nixos.org/packages).
 
 ```nix
   fonts.fontconfig.enable = true;
 ```
 
-Registers Nix-installed fonts with Linux fontconfig. That covers Linux GUI apps
-under WSLg, but **not** the terminal you actually look at, which is a Windows
-process reading the Windows font store.
+Tells Linux about fonts that Nix installed. That covers Linux windows under
+WSLg, but **not** the terminal you actually look at. That one is a Windows
+program reading the Windows font list.
 
-`nerd-fonts.hack` is nonetheless in `home.packages`, and it is the single source
-for both sides: `scripts/install-windows-font.sh` copies these exact files out
-of the Nix store into the Windows font directory. So the font version is pinned
-by `flake.lock` like everything else, rather than by a download URL. See
-[09-windows-bridge.md](09-windows-bridge.md).
+`nerd-fonts.hack` is still in the list above, and it is the single source for
+both sides. `scripts/install-windows-font.sh` copies those exact files into the
+Windows font folder. So the font version is locked by `flake.lock` like
+everything else. See [09-windows-bridge.md](09-windows-bridge.md).
 
 ## Environment
 
@@ -130,29 +127,29 @@ by `flake.lock` like everything else, rather than by a download URL. See
   };
 ```
 
-`sessionVariables` are exported by the session init script, so a shell started
-before a rebuild will not see changes. Open a new shell.
+These are set when your shell starts. A shell you opened *before* a rebuild will
+not see the change. Open a new one.
 
 ## zsh
 
 ```nix
   programs.zsh = {
     enable = true;
-    autosuggestion.enable = true;      # ghost text from history
+    autosuggestion.enable = true;      # grey text from your history
     syntaxHighlighting.enable = true;  # commands turn green when valid
 ```
 
-`programs.zsh.enable` does more than install zsh: it generates `~/.zshrc` and
-wires in the plugins. Do not hand-edit `~/.zshrc`; it is overwritten on every
-switch. Put shell code in `initContent` instead.
+`programs.zsh.enable` does more than install zsh. It writes your `~/.zshrc` and
+sets up the plugins. Do not edit `~/.zshrc` by hand; it is overwritten on every
+rebuild. Put your own shell code in `initContent` instead.
 
 ```nix
     initContent = ''
       bindkey '^f' autosuggest-accept
 ```
 
-Pasted verbatim into the generated `.zshrc`. `ctrl+f` accepts the ghost-text
-suggestion.
+This text is copied straight into the generated `.zshrc`. `ctrl+f` accepts the
+grey suggested text.
 
 ```nix
       case "$PWD" in
@@ -160,11 +157,11 @@ suggestion.
       esac
 ```
 
-WSL-specific. Launching WSL from certain Windows entry points drops you in
-`/mnt/c/Users/<you>`, which is the Windows filesystem exposed over a 9p mount.
-File operations there are roughly an order of magnitude slower and Unix
-permissions do not survive. Bouncing to `$HOME` avoids accidentally starting
-work on the slow side.
+Only needed on WSL. Some ways of starting WSL drop you in
+`/mnt/c/Users/<you>`, which is the Windows disk seen from Linux. Files there are
+roughly ten times slower, and Linux file permissions do not work. This jumps you
+back to your home folder so you do not start working on the slow side by
+accident.
 
 ```nix
       winhome() {
@@ -173,10 +170,10 @@ work on the slow side.
     '';
 ```
 
-Jumps to your Windows user profile. It asks Windows for `%USERPROFILE%` rather
-than assuming `/mnt/c/Users/<same-name>`, because your Windows and WSL usernames
-are frequently different. `wslpath` converts `C:\Users\x` into `/mnt/c/Users/x`,
-and `tr -d "\r"` strips the CR that Windows appends.
+Jumps to your Windows user folder. It asks Windows where that is, instead of
+guessing `/mnt/c/Users/<same-name>`, because your Windows name and your Linux
+name are often different. `wslpath` turns `C:\Users\x` into `/mnt/c/Users/x`, and
+`tr -d "\r"` removes the extra character Windows adds at the end.
 
 ```nix
     shellAliases = {
@@ -192,12 +189,12 @@ and `tr -d "\r"` strips the CR that Windows appends.
   };
 ```
 
-Note WSL puts Windows executables on `PATH`, so `explorer.exe .` opens the
-current Linux directory in Windows Explorer through the `\\wsl.localhost`
-bridge.
+WSL puts Windows programs on your `PATH`, so `explorer.exe .` opens the Linux
+folder you are in inside Windows Explorer.
 
-`cc` and `co` disable the agents' permission prompts. Convenient, but
-understand the tradeoff before using them outside a sandbox.
+`cc` and `co` turn off the permission questions those AI tools normally ask.
+Handy, but understand what you are giving up before using them outside a safe
+sandbox.
 
 ## Starship
 
@@ -216,17 +213,16 @@ understand the tradeoff before using them outside a sandbox.
   };
 ```
 
-`settings` is translated by home-manager into `~/.config/starship.toml`, so you
-get the whole Starship config surface without leaving Nix.
+home-manager turns `settings` into `~/.config/starship.toml`, so you get all of
+Starship's options without leaving Nix.
 
-`format` lists the prompt segments in order: directory, git branch, git status,
-how long the last command took, a line break, then the prompt character. The
-character turns red when the previous command failed, which is the cheapest
-error signal you can have. Unlisted modules are simply not rendered, which is
-also what keeps the prompt fast.
+`format` lists the parts of the prompt in order: folder, git branch, git status,
+how long the last command took, a line break, then the prompt symbol. The symbol
+turns red when the last command failed, which is the cheapest way to notice a
+mistake. Parts you do not list are not drawn, which also keeps the prompt fast.
 
-The `❯` glyph and any git symbols need a Nerd Font in the terminal, which is why
-the font install is not optional.
+The `❯` symbol and the git icons need a Nerd Font in your terminal. That is why
+installing the font is not optional.
 
 ## direnv
 
@@ -237,108 +233,105 @@ the font install is not optional.
   };
 ```
 
-`enable` installs direnv and, more importantly, adds its hook to the generated
-`.zshrc`. That hook is what runs on every prompt to check whether you have
-entered or left a directory with an `.envrc`.
+`enable` installs direnv and, more importantly, adds it to your `.zshrc`. That
+hook runs before each prompt and checks whether you walked into or out of a
+folder with an `.envrc` file.
 
-`nix-direnv.enable` swaps direnv's built-in `use flake` for a much better one.
-It matters for two reasons:
+`nix-direnv.enable` swaps in a much better version of that check. It matters for
+two reasons:
 
-- **Speed.** Plain direnv re-evaluates the whole flake on every `cd` into the
-  project, which takes seconds. nix-direnv caches the result, so only the first
-  entry is slow.
-- **Garbage collection.** Plain direnv registers no GC root, so
-  `nix-collect-garbage` happily deletes a toolchain you are still using.
-  nix-direnv pins it under the project's `.direnv/`.
+- **Speed.** Plain direnv rebuilds the whole flake every time you walk into the
+  folder, which takes seconds. nix-direnv remembers the answer, so only the first
+  time is slow.
+- **Cleanup.** Plain direnv does not tell Nix that these tools are in use, so
+  `nix-collect-garbage` deletes them and the next visit downloads them again.
+  nix-direnv marks them as in use, inside the project's `.direnv/` folder.
 
 Together with a project `flake.nix`, this is what makes `cd ~/my-api` put that
-project's Python on `PATH` and `cd ..` take it away again. Full walkthrough in
+project's Python on your `PATH`, and `cd ..` take it away. Full walkthrough in
 [11-devshells.md](11-devshells.md).
 
-Nothing happens until a directory has both an `.envrc` and your approval via
-`direnv allow` - direnv refuses to execute an `.envrc` it has not been told to
-trust, and re-asks whenever the file changes.
+Nothing happens until a folder has both an `.envrc` file and your permission.
+Run `direnv allow` to give it. direnv asks again whenever the file changes, so
+nobody can slip code into it behind your back.
 
-## The symlinks
+## The file links
 
 ```nix
   home.file.".config/nvim".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/nvim";
 ```
 
-This is the most important mechanism in the repo, and it is worth being precise
-about what it does.
+This is the most important trick in the repo, and it is worth being clear about.
 
-Ordinary `home.file` copies content into the Nix store and symlinks to it. Store
-paths are **read-only**, so a program that rewrites its own config at runtime
-would fail, and you would have to rebuild after every edit.
+Normally `home.file` copies your file into the Nix store and links to the copy.
+Store files are **read-only**. So a program that rewrites its own settings would
+fail, and you would have to rebuild after every small edit.
 
-`mkOutOfStoreSymlink` instead creates a symlink pointing at a path *outside* the
-store - here, straight into this git repo. So:
+`mkOutOfStoreSymlink` makes a link that points *outside* the store, straight into
+this git repo. So:
 
-- Editing `home/.config/nvim/lua/keys.lua` takes effect immediately. No rebuild.
-- Anything Neovim writes back into its config directory shows up as a change in
-  `git status`, which is how the setup stays version-controlled.
+- Editing `home/.config/nvim/lua/keys.lua` works right away. No rebuild.
+- Anything Neovim writes back into that folder shows up in `git status`, which is
+  how your setup stays saved in git.
 
-The tradeoff: the link target is resolved at *activation* time and not checked
-for existence. If `~/.dotfiles` does not exist yet, you get a dangling symlink
-rather than a build error. That is exactly why both scripts run
-`ln -sfn "$DIR" ~/.dotfiles` before switching.
+The trade-off: the link is made when you rebuild, and nothing checks that the
+target exists. If `~/.dotfiles` is missing you get a broken link instead of an
+error. That is exactly why both scripts run `ln -sfn "$DIR" ~/.dotfiles` first.
 
 ```nix
   home.file.".config/herdr".source = ... ;
 ```
 
-Same mechanism.
+Same trick.
 
-Note what is **not** here: `~/.claude/`. Claude Code rewrites its own
-`settings.json` as you change themes and models, and `CLAUDE.md` is edited by
-hand. Pointing home-manager at either one replaces whatever you already had with
-a store symlink. Only symlink files this repo is the sole author of.
+Notice what is **missing**: `~/.claude/`. Claude Code rewrites its own
+`settings.json` when you change themes or models, and you edit `CLAUDE.md` by
+hand. Pointing home-manager at either one would replace what you already had.
+Only link files this repo alone writes.
 
 ```nix
-  # No terminal-emulator config is symlinked here.
+  # No terminal-emulator settings are linked here.
 ```
 
-The deliberate omission. The terminal is a Windows process and cannot read Linux
-dotfiles at all, so a symlink would achieve nothing. What crosses the boundary
-instead is pushed by scripts: the font on every rebuild, and the colour scheme
-once at install. See [05-terminal.md](05-terminal.md).
+Left out on purpose. The terminal is a Windows program and cannot read Linux
+files, so a link would do nothing. What crosses over is pushed by scripts
+instead: the font on every rebuild, and the colours once when you install. See
+[05-terminal.md](05-terminal.md).
 
 ```nix
   home.file.".codex/AGENTS.md".source = ... "${dotfiles}/home/AGENTS.md";
   home.file.".config/opencode/AGENTS.md".source = ... same target ...;
 ```
 
-One file, several link targets. Each agent looks for its memory file in a
-different place and under a different name, so this fans a single source out to
-all of them. Edit `home/AGENTS.md` and every agent picks it up at once, with no
-rebuild.
+One file, several links. Each AI tool looks for its notes in a different place
+under a different name, so this points them all at one file. Edit
+`home/AGENTS.md` and every tool sees the change at once, with no rebuild.
 
-Claude Code is the exception: it reads `~/.claude/CLAUDE.md`, which is left
-unmanaged for the reason above. Copy the parts you want, or symlink it yourself
-if the file is not already in use.
+Claude Code is the exception. It reads `~/.claude/CLAUDE.md`, which we leave
+alone for the reason above. Copy the parts you want, or make the link yourself if
+that file is not already in use.
 
 ```nix
   programs.home-manager.enable = true;
 ```
 
 Puts the `home-manager` command itself into your profile. Without it,
-`rebuild.sh` would have no binary to call and you would be stuck using
+`rebuild.sh` would have nothing to run, and you would be stuck typing
 `nix run home-manager -- ...` forever.
 
-## Adding to this file
+## Adding your own things
 
 ```nix
 # a package
 home.packages = with pkgs; [ ... bat ];
 
-# an alias
+# a shortcut
 programs.zsh.shellAliases.gs = "git status";
 
-# another config directory linked from the repo
+# another settings folder linked from the repo
 home.file.".config/foo".source =
   config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/foo";
 ```
 
-Then `./rebuild.sh`.
+Then run `./rebuild.sh`.

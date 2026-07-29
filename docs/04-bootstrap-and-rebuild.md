@@ -1,6 +1,6 @@
-# 04 - `bootstrap.sh` and `rebuild.sh`
+# 04 - The two scripts
 
-Two scripts: one you run once, one you run forever after.
+`bootstrap.sh` you run once. `rebuild.sh` you run forever after.
 
 ---
 
@@ -15,50 +15,51 @@ home-manager switch --flake ~/.dotfiles#wsl -b backup
 exec "$DIR/scripts/install-windows-font.sh"
 ```
 
-The font install runs after every switch. It is cheap and idempotent, so the
-font on the Windows side cannot drift from the one `flake.lock` pins.
+The font is copied to Windows after every rebuild. It is quick, and running it
+twice changes nothing, so the font on the Windows side can never drift from the
+one Nix installed.
 
-Note what `rebuild.sh` does **not** call:
-`scripts/apply-windows-terminal-theme.sh`. The theme is seeded once by
-`bootstrap.sh` and then belongs to you. Reasoning in
-[05-terminal.md](05-terminal.md).
+Notice what `rebuild.sh` does **not** run:
+`scripts/apply-windows-terminal-theme.sh`. Your terminal colours are set once by
+`bootstrap.sh` and then belong to you. See [05-terminal.md](05-terminal.md).
 
-- `set -euo pipefail` - exit on any failing command (`e`), on any undefined
-  variable (`u`), and on a failure anywhere in a pipeline rather than only at
-  its end (`pipefail`). Without this a mid-script failure would be ignored and
-  the script would report success.
-- `DIR=...` - the absolute, symlink-resolved (`pwd -P`) directory of this
-  script, so it works no matter where you invoke it from.
-- `ln -sfn "$DIR" ~/.dotfiles` - recreate the stable path. `-s` symbolic, `-f`
-  replace an existing link, `-n` treat an existing link to a directory as a file
-  to replace rather than descending into it. Without `-n` you would eventually
-  create `~/.dotfiles/dotfiles-wsl`.
-- `exec` on the final line - replace the shell with the font script instead of
-  forking, so its exit code becomes the script's directly.
-- `--flake ~/.dotfiles#wsl` - build the `homeConfigurations."wsl"` output.
-- `-b backup` - if activation is about to overwrite a file it does not manage
-  (typically `~/.bashrc` or `~/.profile`), rename it to `<name>.backup` instead
-  of aborting. Standalone home-manager fails hard on collisions without this,
-  which is a very common first-run stumble.
+Line by line:
 
-**No `sudo`.** `nixos-rebuild` and `darwin-rebuild` need it because they edit
-system state. This one only writes `$HOME`, and running it as root would build
-the config into `/root`.
+- `set -euo pipefail` - stop as soon as anything fails (`e`), stop if a variable
+  was never set (`u`), and notice a failure anywhere in a chain of commands, not
+  just at the end (`pipefail`). Without this, a failure in the middle would be
+  ignored and the script would claim success.
+- `DIR=...` - the real folder this script lives in, with any links resolved
+  (`pwd -P`). This way it works no matter where you run it from.
+- `ln -sfn "$DIR" ~/.dotfiles` - make the link again. `-s` means a symbolic link,
+  `-f` replaces one that already exists, and `-n` is the important one: without
+  it you would eventually create `~/.dotfiles/dotfiles-wsl` by mistake.
+- `exec` on the last line - replace this script with the font script instead of
+  starting a second one, so its result becomes the result of the whole script.
+- `--flake ~/.dotfiles#wsl` - build the `homeConfigurations."wsl"` part.
+- `-b backup` - if the rebuild is about to overwrite a file it does not manage,
+  usually `~/.bashrc` or `~/.profile`, rename the old one to `<name>.backup`
+  instead of stopping. Without this, home-manager fails outright, which trips up
+  almost everyone on their first run.
+
+**No `sudo`.** `nixos-rebuild` and `darwin-rebuild` need it because they change
+the system. This one only writes inside your home folder. Running it as root
+would build everything into `/root` instead.
 
 ---
 
 # `bootstrap.sh`
 
-Idempotent: safe to re-run at any point.
+Safe to run again at any point.
 
-### Step 0 - confirm WSL
+### Step 0 - check you are on WSL
 
 ```bash
 if ! grep -qi microsoft /proc/version 2>/dev/null; then
 ```
 
-`/proc/version` contains "microsoft" under WSL. Only a warning, since everything
-except the Windows-side steps works on any Linux box.
+On WSL, the file `/proc/version` contains the word "microsoft". This only warns
+you, because everything except the Windows steps works on any Linux machine.
 
 ### Step 1 - systemd
 
@@ -66,10 +67,9 @@ except the Windows-side steps works on any Linux box.
 if [ -d /run/systemd/system ]; then
 ```
 
-The standard test for "systemd is actually running as PID 1", not merely
-installed. Multi-user Nix runs `nix-daemon`, and the Determinate installer
-registers it as a systemd unit; without an init system there is nothing to start
-it and Nix will not work.
+This checks that systemd is actually running, not just installed. Nix runs a
+background service, and the Determinate installer starts it through systemd.
+Without systemd there is nothing to start it, and Nix will not work.
 
 ```bash
   if ! grep -q 'systemd *= *true' /etc/wsl.conf 2>/dev/null; then
@@ -81,14 +81,14 @@ WSLCONF
   fi
 ```
 
-Appends the boot section, guarded so re-running does not add it twice. Quoting
-the heredoc delimiter (`<<'WSLCONF'`) keeps the content literal.
+Adds the setting, and checks first so running twice does not add it twice.
+The quotes in `<<'WSLCONF'` keep the text exactly as written.
 
-The script then **exits 1**, because `/etc/wsl.conf` is only read when the distro
-starts. You must run `wsl --shutdown` from PowerShell and reopen Ubuntu. This is
-the single most common place to get stuck; it is not a failure.
+The script then **stops with an error**, because `/etc/wsl.conf` is only read
+when the distro starts. Run `wsl --shutdown` from PowerShell and open Ubuntu
+again. This is the most common place to get stuck, and it is not a failure.
 
-### Step 2 - Determinate Nix
+### Step 2 - install Nix
 
 ```bash
 if command -v nix >/dev/null 2>&1; then
@@ -100,45 +100,46 @@ else
 fi
 ```
 
-The Determinate installer supports WSL2 directly. The curl flags matter:
-`--proto '=https'` refuses a plaintext redirect, `--tlsv1.2` sets a TLS floor,
-`-f` makes HTTP errors non-zero instead of piping an error page into `sh`.
+The Determinate installer supports WSL2 directly. The `curl` options matter:
+`--proto '=https'` refuses to fall back to an unencrypted connection,
+`--tlsv1.2` sets a minimum security level, and `-f` makes a web error a real
+error instead of piping an error page into the shell.
 
-`--no-confirm` skips the interactive prompt, since bootstrap already asked you
-to run it.
+`--no-confirm` skips the yes/no question, since bootstrap already asked you to
+run this.
 
-The trailing `.` sources the profile script so `nix` is on `PATH` for the rest of
-*this* script; new shells get it automatically.
+The lone `.` at the start of the last line loads the Nix settings so that `nix`
+works for the rest of *this* script. New shells pick it up by themselves.
 
-Determinate enables flakes by default, which is why nothing here sets
+Determinate turns on flakes for you, which is why nothing here sets
 `experimental-features`.
 
-### Step 3 - the `~/.dotfiles` symlink
+### Step 3 - the `~/.dotfiles` link
 
-Identical to `rebuild.sh`, and it must happen **before** the first switch:
-`home.nix` builds its `mkOutOfStoreSymlink` targets from that path.
+The same as in `rebuild.sh`, and it must happen **before** the first build.
+`home.nix` builds its link targets from that path.
 
-### Step 4 - personalize the username
+### Step 4 - set your username
 
 ```bash
 REAL_USER="$(whoami)"
 FLAKE_USER="$(sed -nE 's/^[[:space:]]*user = "([^"]+)";.*/\1/p' "$DIR/flake.nix" | head -n1)"
 ```
 
-Reads the `user = "..."` line back out of `flake.nix`. If you reformat that line,
-this stops matching, which is why `flake.nix` calls it out.
+Reads the `user = "..."` line back out of `flake.nix`. If you change the spacing
+on that line, this stops finding it, which is why `flake.nix` warns you.
 
 ```bash
     sed -i -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
 ```
 
-Rewrites it in place. Note this is GNU sed: `-i` takes no argument. BSD sed, as
-found on macOS, requires an explicit backup-suffix (`sed -i '' -E`), so a line
-copied from a macOS script fails here and vice versa.
+Changes it in place. Note this is GNU sed, where `-i` takes no extra value. The
+sed on macOS needs `sed -i '' -E` instead, so a line copied from a macOS script
+fails here, and the other way round.
 
-No `sudo` runs before this point, so `whoami` is reliable here.
+No `sudo` has run yet at this point, so `whoami` gives the right answer.
 
-### Step 5 - the first switch
+### Step 5 - the first build
 
 ```bash
 NIX_BIN="$(command -v nix)"
@@ -146,26 +147,25 @@ NIX_BIN="$(command -v nix)"
   switch --flake ~/.dotfiles#wsl -b backup
 ```
 
-`home-manager` is not on `PATH` yet, so it is run straight from its flake this
-once. After this switch, `programs.home-manager.enable = true` has installed the
-command properly and `rebuild.sh` works.
+`home-manager` is not installed yet, so we run it straight from the internet
+this one time. After this build finishes, `programs.home-manager.enable = true`
+has installed the command properly and `rebuild.sh` works.
 
-The `--` separates arguments to `nix run` from arguments to home-manager.
+The `--` separates options for `nix run` from options for home-manager.
 
-The branch here (`release-26.05`) should match `flake.nix`. Note this fetches
-the *tool* from that branch; the configuration it applies is still pinned by
-your `flake.lock`.
+The branch here (`release-26.05`) should match `flake.nix`. This only picks the
+*tool*; the settings it applies still come from your `flake.lock`.
 
-This is the slow step on a fresh machine.
+This is the slow step on a new computer.
 
-### Step 6 - zsh as the login shell
+### Step 6 - make zsh your shell
 
 ```bash
 ZSH_BIN="$HOME/.nix-profile/bin/zsh"
 ```
 
-The home-manager zsh, not an apt one. Using the Nix build is what makes the
-shell reproducible.
+The zsh that home-manager installed, not one from apt. Using the Nix one is what
+makes your shell the same on every computer.
 
 ```bash
   if ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
@@ -174,16 +174,16 @@ shell reproducible.
   chsh -s "$ZSH_BIN" || { ... }
 ```
 
-`chsh` refuses any shell absent from `/etc/shells`, so it is registered first.
-`grep -qxF` matches the whole line, literally, so a partial match cannot cause a
-duplicate entry.
+`chsh` refuses any shell that is not listed in `/etc/shells`, so we add it
+first. `grep -qxF` matches the whole line exactly, so a partial match cannot
+create a duplicate entry.
 
-`chsh` prompts for your password and can fail under some WSL PAM configurations.
-The fallback printed on failure is to append `exec ~/.nix-profile/bin/zsh -l` to
-`~/.bashrc`, which achieves the same result at login.
+`chsh` asks for your password and fails on some WSL setups. If it does, the
+script adds a line to `~/.bashrc` that starts zsh at login instead, which needs
+no password.
 
-This step exists because Ubuntu logs you into bash. A distro that already
-defaults to zsh would not need it.
+This step exists because Ubuntu starts you in bash. A system that already uses
+zsh would not need it.
 
 ### Step 7 - the font
 
@@ -192,34 +192,33 @@ defaults to zsh would not need it.
   echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 ```
 
-Pushes the font across to Windows. There is no separate PowerShell step: WSL can
-call Windows executables and write to the Windows filesystem, so this runs
-inside the same bootstrap.
+Copies the font to Windows. There is no separate PowerShell step: WSL can run
+Windows programs and write to the Windows disk, so this happens right here.
 
-The `||` matters. A missing font is a cosmetic problem, not a reason to fail a
-bootstrap that has already installed everything else successfully. Covered in
-[09-windows-bridge.md](09-windows-bridge.md).
+The `||` matters. A missing font is only a cosmetic problem, not a reason to
+fail an install that has already worked.
+See [09-windows-bridge.md](09-windows-bridge.md).
 
-### Step 8 - seed the terminal theme
+### Step 8 - set the terminal colours
 
 ```bash
 "$DIR/scripts/apply-windows-terminal-theme.sh" || \
   echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
 ```
 
-**The only place this script is ever called automatically.** It merges the
-colour scheme and profile defaults from `windows/` into Windows Terminal's
-`settings.json`, backing the file up first.
+**The only place this script ever runs by itself.** It adds the colours and font
+settings from `windows/` into Windows Terminal's `settings.json`, saving a copy
+of the old file first.
 
-It is a no-op if the scheme is already there, which is what makes re-running
-bootstrap safe: your terminal customisations are never silently reverted. The
-same `||` guard applies for the same reason.
+It does nothing if your colours are already there. That is what makes running
+bootstrap again safe: your terminal changes are never undone. The `||` is there
+for the same reason as above.
 
-Full reasoning for why this runs at bootstrap and not at rebuild is in
+The full reasoning for why this runs at install and not at rebuild is in
 [05-terminal.md](05-terminal.md).
 
-## Re-running
+## Running it again
 
-Every step is guarded, so re-running is a cheap way to repair a partial setup.
-The only step that changes anything on a second run is step 5, which rebuilds.
-Step 8 explicitly does nothing once the theme has been seeded.
+Every step checks first, so running bootstrap again is a cheap way to fix a
+half-finished setup. The only step that does real work the second time is step 5,
+which rebuilds. Step 8 does nothing once your colours are set.
