@@ -60,6 +60,7 @@ version to keep current.
     lazygit
     neovim
     git
+    gh
     herdr
     nodejs_24
     uv
@@ -90,6 +91,16 @@ updates itself - see [08-agents.md](08-agents.md).
 `jq` is here because it is the standard way to handle JSON on the command line,
 and because `apply-windows-terminal-theme.sh` uses it to merge the terminal
 theme.
+
+`gh` is worth calling out because it covers a gap SSH cannot. An SSH key
+authenticates git transport only: clone, fetch, push. Pull requests are not git
+- creating, reviewing and merging them goes through GitHub's REST API, which
+does not accept SSH keys. `gh auth login` mints an API token and stores it in
+`~/.config/gh/hosts.yml`.
+
+Keep it there rather than exporting `GH_TOKEN` from your shell config. An
+exported token is readable in the environment of every process you launch,
+agents included; the `gh` config file is not.
 
 `git` is listed even though `bootstrap.sh` requires git to clone the repo. That
 bootstrap git comes from apt; this one is Nix-managed and pinned, and takes

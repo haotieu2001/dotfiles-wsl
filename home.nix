@@ -27,6 +27,7 @@ in
     lazygit
     neovim
     git
+    gh        # github cli: PRs, releases, and the thing that holds the API token
 
     herdr     # agent multiplexer
 
