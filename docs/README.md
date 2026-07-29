@@ -16,7 +16,7 @@ that everything else follows from.
 | [05 - The terminal](05-terminal.md) | Why WezTerm was dropped, and the Windows Terminal setup |
 | [06 - Neovim](06-neovim.md) | Every Lua file, including the WSL clipboard bridge |
 | [07 - herdr](07-herdr.md) | Keybindings and running agents in panes |
-| [08 - Agents](08-agents.md) | `AGENTS.md` fan-out and the Claude status line |
+| [08 - Agents](08-agents.md) | `AGENTS.md` fan-out, and what this repo refuses to manage |
 | [09 - The Windows bridge](09-windows-bridge.md) | `sync-windows-terminal.sh`, the one script that crosses the boundary |
 | [10 - Troubleshooting](10-troubleshooting.md) | WSL-specific failure modes |
 

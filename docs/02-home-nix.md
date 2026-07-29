@@ -62,7 +62,6 @@ version to keep current.
     neovim
     git
     herdr
-    claude-code
     nerd-fonts.hack
   ];
 ```
@@ -70,8 +69,12 @@ version to keep current.
 `with pkgs;` lets you write `ripgrep` instead of `pkgs.ripgrep`.
 
 Everything the video installs through Homebrew that still runs inside Linux is
-here instead. `jq` is not optional decoration: the Claude Code status line in
-`home/.claude/settings.json` shells out to it.
+here instead, with one deliberate exception: `claude-code`. It ships a
+self-updater, and a read-only Nix store is the wrong home for anything that
+updates itself - see [08-agents.md](08-agents.md).
+
+`jq` earns its place independently: `scripts/sync-windows-terminal.sh` uses it
+to merge into the Windows Terminal settings file.
 
 `git` is listed even though `bootstrap.sh` requires git to clone the repo. That
 bootstrap git comes from apt; this one is Nix-managed and pinned, and takes
@@ -98,15 +101,10 @@ by `flake.lock` like everything else, rather than by a download URL. See
 ```nix
   home.sessionVariables = {
     EDITOR = "nvim";
-    DISABLE_AUTOUPDATER = "1";
   };
 ```
 
-`EDITOR` is straight from the video. `DISABLE_AUTOUPDATER` is WSL/Nix specific:
-Claude Code tries to update itself in place, and its install location is in the
-read-only Nix store, so the attempt fails noisily on every launch. Turning it
-off makes `nix flake update` the single upgrade path, which is the behavior you
-want from a declarative setup anyway.
+`EDITOR` is straight from the video.
 
 `sessionVariables` are exported by the session init script, so a shell started
 before a rebuild will not see changes. Open a new shell.
@@ -234,12 +232,14 @@ rather than a build error. That is exactly why both scripts run
 
 ```nix
   home.file.".config/herdr".source = ... ;
-  home.file.".claude/settings.json".source = ... ;
 ```
 
-Same mechanism. Note `settings.json` links a single file rather than a
-directory, so the rest of `~/.claude/` (credentials, project history, caches)
-stays local and untracked.
+Same mechanism.
+
+Note what is **not** here: `~/.claude/`. Claude Code rewrites its own
+`settings.json` as you change themes and models, and `CLAUDE.md` is edited by
+hand. Pointing home-manager at either one replaces whatever you already had with
+a store symlink. Only symlink files this repo is the sole author of.
 
 ```nix
   # No terminal-emulator config is symlinked here.
@@ -251,16 +251,18 @@ dotfiles at all, so a symlink would achieve nothing. Its settings live in
 instead. See [05-terminal.md](05-terminal.md).
 
 ```nix
-  home.file.".claude/CLAUDE.md".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";
-  home.file.".codex/AGENTS.md".source = ... same target ...;
+  home.file.".codex/AGENTS.md".source = ... "${dotfiles}/home/AGENTS.md";
   home.file.".config/opencode/AGENTS.md".source = ... same target ...;
 ```
 
-One file, three link targets. Each agent looks for its memory file in a
+One file, several link targets. Each agent looks for its memory file in a
 different place and under a different name, so this fans a single source out to
 all of them. Edit `home/AGENTS.md` and every agent picks it up at once, with no
-rebuild. This is the video's 39:36 chapter, and it is unchanged on WSL.
+rebuild. This is the video's 39:36 chapter.
+
+Claude Code is the exception: it reads `~/.claude/CLAUDE.md`, which is left
+unmanaged for the reason above. Copy the parts you want, or symlink it yourself
+if the file is not already in use.
 
 ```nix
   programs.home-manager.enable = true;

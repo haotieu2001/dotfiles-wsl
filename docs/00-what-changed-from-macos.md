@@ -81,8 +81,10 @@ already has everything except herdr, and a second package manager would break
 the single-source-of-truth property that `cleanup = "zap"` was protecting in the
 first place. So:
 
-- `claude-code` moves to `home.packages` (it is in nixpkgs, under an unfree license,
-  which is why `flake.nix` sets `config.allowUnfree = true`).
+- `claude-code` is dropped rather than moved. It is in nixpkgs, but it updates
+  itself into `~/.local/bin`, and a Nix-store copy both freezes that and shadows
+  the newer one on `PATH`. Declarative packaging and self-updating binaries are
+  a genuinely bad match.
 - `wezterm` is dropped entirely in favour of Windows Terminal, which is already
   installed and needs no package manager. See [05-terminal.md](05-terminal.md)
   for why the terminal emulator matters less here than it looks.
@@ -142,7 +144,5 @@ These exist only because WSL has sharp edges the video never hits:
 - zsh jumps back to `$HOME` if it starts in `/mnt/...`, because the 9p mount to
   the Windows filesystem is drastically slower than the Linux one.
 - A `winhome` function and an `e` alias (`explorer.exe .`) for crossing the boundary.
-- `DISABLE_AUTOUPDATER = "1"`, because Claude Code's self-updater cannot write
-  into the read-only Nix store.
 - A WSL section in `AGENTS.md` telling agents not to use apt and not to put
   repos on `/mnt/c`.

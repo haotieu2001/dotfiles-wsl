@@ -54,7 +54,7 @@ flowchart TB
     subgraph WSL["WSL2 Ubuntu - everything Nix-managed"]
         HM["home-manager<br/>flake.nix + home.nix"]
         HERDR["herdr<br/>workspaces, tabs, panes"]
-        BIN["nvim, zsh, starship,<br/>ripgrep, claude-code, ..."]
+        BIN["nvim, zsh, starship,<br/>ripgrep, fd, fzf, jq, ..."]
         subgraph CFG["home/ - live-symlinked config"]
             NVIM["nvim/"]
             HCFG["herdr/config.toml"]
@@ -73,7 +73,7 @@ flowchart TB
     SYNC --> FONT
     WT ==>|attaches to| HERDR
     HERDR --> BIN
-    AG -.->|symlinked| AGENTS["~/.claude/CLAUDE.md<br/>~/.codex/AGENTS.md<br/>~/.config/opencode/AGENTS.md"]
+    AG -.->|symlinked| AGENTS["~/.codex/AGENTS.md<br/>~/.config/opencode/AGENTS.md"]
 
     style WIN fill:#2a2438,stroke:#c4a7e7,color:#e0def4
     style WSL fill:#232136,stroke:#9ccfd8,color:#e0def4
@@ -192,7 +192,6 @@ dotfiles-wsl/
 │   └── sync-windows-terminal.sh    # the only thing that crosses to Windows
 ├── home/                           # live-symlinked into $HOME
 │   ├── AGENTS.md                   # global agent memory, shared by all agents
-│   ├── .claude/settings.json       # theme + status line
 │   ├── windows-terminal/           # colour scheme + profile, pushed to Windows
 │   └── .config/
 │       ├── herdr/config.toml
@@ -239,7 +238,7 @@ the video. Commit `home/.config/nvim/lazy-lock.json` if you want them locked.
 | [05 - The terminal](docs/05-terminal.md) | Why WezTerm was dropped; the Windows Terminal setup |
 | [06 - Neovim](docs/06-neovim.md) | Every Lua file, including the clipboard bridge |
 | [07 - herdr](docs/07-herdr.md) | Keybindings and running agents in panes |
-| [08 - Agents](docs/08-agents.md) | `AGENTS.md` fan-out and the Claude status line |
+| [08 - Agents](docs/08-agents.md) | `AGENTS.md` fan-out, and what this repo refuses to manage |
 | [09 - The Windows bridge](docs/09-windows-bridge.md) | `sync-windows-terminal.sh`, line by line |
 | [10 - Troubleshooting](docs/10-troubleshooting.md) | WSL-specific failure modes |
 

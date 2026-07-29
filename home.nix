@@ -15,8 +15,9 @@ in
 
   # On macOS this list lived partly in nixpkgs and partly in Homebrew casks.
   # On WSL there is no Homebrew: everything that runs inside Linux comes from
-  # nixpkgs. Things that must render on the Windows side (WezTerm, the font)
-  # are installed by windows/setup-windows.ps1 instead.
+  # nixpkgs. The one thing that must render on the Windows side is the font,
+  # which is still sourced from here and pushed across the boundary by
+  # scripts/sync-windows-terminal.sh.
   home.packages = with pkgs; [
     # cli i use constantly
     ripgrep   # fast search
@@ -27,8 +28,12 @@ in
     neovim
     git
 
-    herdr       # agent multiplexer (was `brews = [ "herdr" ]` on macOS)
-    claude-code # was `casks = [ "claude-code" ]` on macOS
+    herdr     # agent multiplexer (was `brews = [ "herdr" ]` on macOS)
+
+    # claude-code is deliberately NOT here. It ships a self-updater that keeps
+    # itself current in ~/.local/bin; pinning it in the Nix store freezes it at
+    # whatever flake.lock says and shadows the newer copy on PATH. Tools that
+    # update themselves are a bad fit for a read-only store.
 
     # The terminal font. Pinned here by flake.lock, then copied across the
     # WSL/Windows boundary by scripts/sync-windows-terminal.sh, because the
@@ -43,9 +48,6 @@ in
 
   home.sessionVariables = {
     EDITOR = "nvim";
-    # Claude Code ships its own updater, which cannot write into the read-only
-    # Nix store. Turn it off and let `nix flake update` handle versioning.
-    DISABLE_AUTOUPDATER = "1";
   };
 
   programs.zsh = {
@@ -98,15 +100,16 @@ in
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/nvim";
   home.file.".config/herdr".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/herdr";
-  home.file.".claude/settings.json".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.claude/settings.json";
+
+  # ~/.claude is deliberately NOT managed here. Claude Code's settings.json and
+  # CLAUDE.md are edited in place by the tool and by hand, and home-manager
+  # replacing them with store symlinks silently displaces whatever was already
+  # there. Only symlink files this repo is the sole author of.
 
   # No terminal-emulator config is symlinked here. The terminal is a Windows
   # process and cannot read Linux dotfiles, so its settings are pushed across
   # the boundary from home/windows-terminal/ instead. See docs/05-terminal.md.
 
-  home.file.".claude/CLAUDE.md".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";
   home.file.".codex/AGENTS.md".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";
   home.file.".config/opencode/AGENTS.md".source =

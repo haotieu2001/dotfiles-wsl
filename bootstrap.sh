@@ -122,10 +122,31 @@ else
     echo "    registering $ZSH_BIN in /etc/shells (needs sudo)"
     echo "$ZSH_BIN" | sudo tee -a /etc/shells >/dev/null
   fi
-  chsh -s "$ZSH_BIN" || {
-    echo "    chsh failed. Fallback: add this to the end of ~/.bashrc"
-    echo "        exec $ZSH_BIN -l"
-  }
+  # chsh needs your UNIX password (not sudo) and fails under some WSL PAM
+  # setups. Fall back to launching zsh from ~/.bashrc, which needs no password.
+  if ! chsh -s "$ZSH_BIN"; then
+    echo "    chsh failed. Falling back to launching zsh from ~/.bashrc."
+    if [ -f "$HOME/.bashrc" ] && grep -q "dotfiles-wsl: launch zsh" "$HOME/.bashrc"; then
+      echo "    already present, nothing to do"
+    elif [ -L "$HOME/.bashrc" ]; then
+      echo "    ~/.bashrc is a symlink (home-manager managed); not touching it."
+      echo "    Enable programs.bash in home.nix, or fix chsh, to get zsh at login."
+    else
+      cp -f "$HOME/.bashrc" "$HOME/.bashrc.pre-dotfiles-wsl" 2>/dev/null || true
+      cat >> "$HOME/.bashrc" <<BASHRC
+
+# dotfiles-wsl: launch zsh -- remove this block once \`chsh\` is working
+# Guards, in order: only a LOGIN shell, so tooling that runs \`bash -ic "cmd"\`
+# is not hijacked and left hanging; only interactive; only on a real tty; and
+# never recursively. Dropping the login_shell test breaks any such tooling.
+if shopt -q login_shell && [[ \$- == *i* ]] && [ -t 0 ] \\
+   && [ -z "\${ZSH_VERSION:-}" ] && [ -x "$ZSH_BIN" ]; then
+  exec "$ZSH_BIN" -l
+fi
+BASHRC
+      echo "    added to ~/.bashrc (backup: ~/.bashrc.pre-dotfiles-wsl)"
+    fi
+  fi
 fi
 
 echo "==> Step 7: Windows Terminal"

@@ -46,9 +46,9 @@ by hand without that flag - use `./rebuild.sh`.
 ### `Could not resolve host` during the first build
 
 ```
-> trying https://downloads.claude.ai/claude-code-releases/2.1.187/linux-x64/claude
-> curl: (6) Could not resolve host: downloads.claude.ai
-error: cannot download claude from any mirror
+> trying https://github.com/ogulcancelik/herdr/releases/download/v0.7.5/herdr-linux-x86_64
+> curl: (6) Could not resolve host: github.com
+error: cannot download herdr-linux-x86_64 from any mirror
 ```
 
 **Almost always transient. Re-run `./bootstrap.sh`.** Since Nix caches what it
@@ -59,7 +59,7 @@ The cause is a WSL timing quirk, not a misconfiguration. WSL routes DNS through
 a proxy on the Windows host (typically `10.255.255.254`, see `/etc/resolv.conf`),
 and that proxy is briefly unreachable while the Nix daemon and systemd units
 settle right after Step 2 installs Nix. Flake inputs are fetched by the daemon
-and usually land before the gap; fixed-output derivations like `claude-code`
+and usually land before the gap; fixed-output derivations like `herdr`
 download inside the build sandbox moments later and hit it.
 
 The giveaway is that every retry fails inside a few seconds, and packages that
@@ -111,10 +111,11 @@ pwd -P      # should start with /home, not /mnt
 The flake fragment does not match. `flake.nix` must define
 `homeConfigurations."wsl"` and the scripts must use `#wsl`.
 
-### `error: Package 'claude-code' has an unfree license`
+### `error: Package '<name>' has an unfree license`
 
-`config.allowUnfree = true` is missing from the `import nixpkgs` block in
-`flake.nix`, or nixpkgs was pulled in via `legacyPackages`, which ignores config.
+You added a package with a non-free license. `config.allowUnfree = true` is
+missing from the `import nixpkgs` block in `flake.nix`, or nixpkgs was pulled in
+via `legacyPackages`, which ignores config.
 
 ## Shell
 
@@ -133,13 +134,36 @@ echo "$HOME/.nix-profile/bin/zsh" | sudo tee -a /etc/shells
 chsh -s "$HOME/.nix-profile/bin/zsh"
 ```
 
-`chsh` fails under some WSL PAM setups. Fallback - append to `~/.bashrc`:
+`chsh` needs your **UNIX password**, not sudo, and fails under some WSL PAM
+setups. Note that `sudo tee` succeeding tells you nothing about whether `chsh`
+did: in the combined one-liner the first half can work while the second fails.
+Run `chsh` on its own to see the actual error.
+
+If it will not work, `bootstrap.sh` falls back to launching zsh from
+`~/.bashrc`. To do it by hand, append **this**, not a bare `exec`:
 
 ```bash
-exec "$HOME/.nix-profile/bin/zsh" -l
+if shopt -q login_shell && [[ $- == *i* ]] && [ -t 0 ] \
+   && [ -z "${ZSH_VERSION:-}" ] && [ -x "$HOME/.nix-profile/bin/zsh" ]; then
+  exec "$HOME/.nix-profile/bin/zsh" -l
+fi
 ```
 
+The `shopt -q login_shell` test is the important one. A bare
+`exec zsh -l` in `~/.bashrc` also fires for *non-login* interactive shells, so
+any tool that runs `bash -ic "some command"` gets zsh exec'd over it, loses the
+command, and hangs forever. `[ -t 0 ]` keeps it out of pipelines.
+
 Log out and back in either way; `chsh` does not affect the current session.
+
+### /etc/shells has duplicate zsh entries
+
+Harmless, but from re-running the registration. Tidy up with:
+
+```bash
+sudo cp /etc/shells /etc/shells.bak
+sudo awk '!seen[$0]++' /etc/shells.bak | sudo tee /etc/shells >/dev/null
+```
 
 ### Aliases or `$EDITOR` did not update
 
@@ -266,23 +290,28 @@ it. Check for leftover state with `herdr status server`.
 
 ## Agents
 
-### Claude Code cannot update itself
+### `claude` runs an old version
 
-Intended. It lives in the read-only Nix store, and `DISABLE_AUTOUPDATER = "1"`
-turns off the attempt. Upgrade with `nix flake update` then `./rebuild.sh`.
+Check which one is winning:
 
-### Status line is blank
+```bash
+command -v claude && claude --version
+```
 
-It shells out to `jq`. Confirm `which jq` resolves; if not, `jq` is missing from
-`home.packages`.
+If it resolves inside `/nix/store`, something added `claude-code` back to
+`home.packages`. Remove it - the Nix copy is frozen at `flake.lock` and sits
+ahead of the self-updating `~/.local/bin/claude` on `PATH`. See
+[08-agents.md](08-agents.md).
 
 ### An agent ignores `AGENTS.md`
 
-Check the symlink resolves:
+Claude Code reads `~/.claude/CLAUDE.md`, which this repo does not manage - see
+[08-agents.md](08-agents.md). For the agents it does manage, check the symlink
+resolves:
 
 ```bash
-ls -l ~/.claude/CLAUDE.md
-readlink -f ~/.claude/CLAUDE.md
+ls -l ~/.codex/AGENTS.md
+readlink -f ~/.codex/AGENTS.md
 ```
 
 A dangling link means `~/.dotfiles` does not point at the repo. Run

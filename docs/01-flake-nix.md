@@ -84,7 +84,9 @@ This replaces the video's `nixpkgs.hostPlatform = "aarch64-darwin"`.
 
 Instantiates nixpkgs for our platform. `allowUnfree` is the direct equivalent
 of the video's `nixpkgs.config.allowUnfree = true`: nixpkgs refuses to build
-non-free-licensed packages unless you opt in, and `claude-code` is one of them.
+non-free-licensed packages unless you opt in. Nothing in the current package set
+needs it, but it is kept so adding one later does not mean editing `flake.nix`
+and re-learning why the build suddenly fails.
 
 Note we use `import nixpkgs { ... }` rather than the shorter
 `nixpkgs.legacyPackages.${system}`. The short form gives you a package set with

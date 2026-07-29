@@ -26,7 +26,8 @@
 
       pkgs = import nixpkgs {
         inherit system;
-        # Lets us install packages with non-free licenses, e.g. claude-code.
+        # Lets us install packages with non-free licenses. Nothing in the
+        # current set needs it; kept so adding one later is a one-line change.
         config.allowUnfree = true;
       };
     in
