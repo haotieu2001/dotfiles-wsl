@@ -1,25 +1,26 @@
 # 07 - herdr
 
-herdr is a terminal multiplexer built for the agent era: it gives each agent its
-own pane and tracks whether that agent is working, blocked, or done in a
-sidebar.
+herdr lets you run many terminals inside one window. It was built for working
+with AI coding tools: each tool gets its own pane, and a sidebar shows whether it
+is working, waiting for you, or finished.
 
-Two parts: the package ([03-modules-herdr-nix.md](03-modules-herdr-nix.md)) and
-the config below, symlinked live by `home.nix`.
+There are two parts: the package
+([03-modules-herdr-nix.md](03-modules-herdr-nix.md)) and the settings below,
+which `home.nix` links straight from this repo.
 
-## Why it fits WSL well
+## Why it suits WSL
 
-It runs as a **Linux** process inside WSL, so its sessions survive independently
-of whichever terminal window is attached. Close the terminal, reopen it, run
-`herdr`, and your agents are still running exactly where you left them.
+herdr runs as a **Linux** program inside WSL, so its sessions do not depend on
+the terminal window. Close the terminal, open it again, type `herdr`, and your
+tools are still running exactly where you left them.
 
-It also does the job the terminal emulator would otherwise do. That is why this
-repo carries no terminal-emulator config at all: with herdr providing
-workspaces, tabs, panes and detachable sessions, the host terminal only has to
-be a fast, correct VT renderer. See [05-terminal.md](05-terminal.md).
+It also does the job the terminal program would normally do. That is why this
+repo has no terminal settings at all. herdr gives you workspaces, tabs, panes and
+sessions you can leave running, so the terminal only has to draw text quickly and
+correctly. See [05-terminal.md](05-terminal.md).
 
-Upstream also handles WSL explicitly, for example defaulting to its own drawn
-cursor under WSL to avoid host cursor flicker.
+The authors handle WSL directly too. For example, herdr draws its own cursor
+under WSL, because the Windows one flickers.
 
 ## `home/.config/herdr/config.toml`, line by line
 
@@ -28,12 +29,12 @@ cursor under WSL to avoid host cursor flicker.
 prefix = "ctrl+b"
 ```
 
-The prefix key, pressed before any multiplexer command. `ctrl+b` is the tmux
-default, chosen here purely to preserve muscle memory. If you never used tmux,
-herdr's own defaults are reasonable and you can delete this whole section.
+The key you press *before* any herdr command. `ctrl+b` is what tmux uses, chosen
+here only so your fingers do not have to learn something new. If you never used
+tmux, herdr's own defaults are fine and you can delete this whole section.
 
-Be aware `ctrl+b` is "move back one character" in a readline shell, so it is
-shadowed while herdr is running.
+Be aware that `ctrl+b` normally means "move back one character" in a shell. While
+herdr is running, it does not.
 
 ```toml
 focus_pane_left  = "prefix+h"
@@ -42,88 +43,89 @@ focus_pane_up    = "prefix+k"
 focus_pane_right = "prefix+l"
 ```
 
-Pane movement on `hjkl`, matching Vim's directions.
+Moving between panes with `hjkl`, the same directions Vim uses.
 
 ```toml
 split_horizontal = "prefix+double_quote"
 split_vertical    = "prefix+percent"
 ```
 
-`prefix+"` and `prefix+%`, the tmux bindings. Written as key names because the
-characters are shifted.
+`prefix+"` and `prefix+%`, again from tmux. We write the key names out because
+those characters need the Shift key.
 
-Note the tmux naming is famously backwards: `split_horizontal` produces a
-horizontal *divider*, i.e. panes stacked vertically.
+One warning: the tmux names are backwards. `split_horizontal` draws a
+*horizontal line*, which puts the two panes one above the other.
 
 ```toml
 new_tab   = "prefix+c"
 close_tab = "prefix+ampersand"
 ```
 
-`prefix+c` creates, `prefix+&` closes, both from tmux.
+`prefix+c` makes a tab, `prefix+&` closes one. Both from tmux.
 
 ```toml
 workspace_picker = "prefix+w"
 goto             = "prefix+g"
 ```
 
-`prefix+w` lists workspaces, the top-level grouping in the sidebar.
-`prefix+g` is the jump-to prompt.
+`prefix+w` lists your workspaces, which are the top-level groups in the sidebar.
+`prefix+g` opens a "jump to" box.
 
 ```toml
 copy_mode  = "prefix+y"
 ```
 
-Enters copy mode for scrolling back and selecting text with Vim motions. Only
-the *entry* key is configurable; inside copy mode the keys are fixed (`v` or
-space to select, `y` or Enter to copy, `q` or Escape to cancel).
+Enters copy mode, where you can scroll back and select text with Vim keys. Only
+the key that *enters* copy mode can be changed. Once inside, the keys are fixed:
+`v` or space to select, `y` or Enter to copy, `q` or Escape to cancel.
 
-Copy mode writes to the clipboard herdr can reach. Crossing into Windows is a
-separate step, which is why Neovim has its own clipboard bridge.
+Copy mode copies to the clipboard that herdr can reach. Getting text over to
+Windows is a separate problem, which is why Neovim has its own solution for it.
 
 ```toml
 [ui]
 agent_panel_sort = "spaces"
 ```
 
-Sidebar ordering: `"spaces"` groups agents by workspace, `"priority"` floats
-agents needing attention to the top. Set explicitly rather than relying on the
-default.
+How the sidebar is sorted. `"spaces"` groups tools by workspace. `"priority"`
+moves the ones needing your attention to the top. We set it here rather than
+relying on whatever the default happens to be.
 
-## Using it with agents
+## Using it with AI tools
 
 ```bash
-herdr                       # start or attach
+herdr                       # start, or rejoin what is already running
 ```
 
-Then `prefix+c` for a tab, `prefix+%` to split, and run an agent in a pane:
+Then `prefix+c` for a tab, `prefix+%` to split, and start a tool in a pane:
 
 ```bash
 cc                          # claude --dangerously-skip-permissions
 ```
 
-The sidebar shows that pane's live state. That is the payoff described at 38:32:
-you can see at a glance which agents are working and which are waiting for you,
-without switching to each pane.
+The sidebar shows what that pane is doing. This is the real benefit: you can see
+at a glance which tools are busy and which are waiting for you, without visiting
+each pane one by one.
 
-Agent integrations are installed per agent:
+Each tool needs its own small add-on:
 
 ```bash
 herdr integration install claude
 ```
 
-## Interaction with the rest of this setup
+## How it fits with the rest of this setup
 
-- **Neovim mouse.** `vim_config.lua` sets `o.mouse = ''` so herdr can keep host
-  mouse capture off, which stops `Escape` being swallowed by mouse-sequence
-  parsing. Enabling the mouse in Neovim can bring that back.
-- **Escape as save.** herdr passes `Escape` through as its own key, so the
-  Escape-to-save binding works inside herdr panes.
-- **`.gitignore`.** herdr writes logs, a session file, and sockets into its
-  config directory. Since that directory is a live symlink into the repo, those
-  runtime artifacts would otherwise show up in `git status`. They are ignored.
+- **The mouse in Neovim.** `vim_config.lua` sets `o.mouse = ''`. This lets herdr
+  leave mouse tracking off, which stops `Escape` being eaten while the terminal
+  tries to work out a mouse movement. Turning the mouse back on in Neovim can
+  bring that problem back.
+- **Escape saves.** herdr passes `Escape` straight through, so the
+  Escape-to-save key still works inside a herdr pane.
+- **`.gitignore`.** herdr writes logs, a session file and sockets into its
+  settings folder. Because that folder is linked into this repo, those files
+  would otherwise show up in `git status`. We ignore them.
 
-## Upgrading
+## Updating
 
-Do **not** run `herdr update`: it writes to `~/.local/bin`, outside Nix, leaving
-two binaries on `PATH`. Bump the pinned version in `modules/herdr.nix` instead.
+Do **not** run `herdr update`. It writes into `~/.local/bin`, outside Nix, and
+you end up with two copies. Change the version in `modules/herdr.nix` instead.
