@@ -53,41 +53,10 @@ is yours and no rebuild touches it. herdr provides the workspaces, tabs, panes
 and detachable sessions, so the host terminal only has to be a fast, correct VT
 renderer with a good font.
 
-```mermaid
-flowchart TB
-    subgraph WIN["Windows host"]
-        WT["Windows Terminal<br/>(draws the window)"]
-        FONT["Hack Nerd Font<br/>registered per-user"]
-    end
-
-    subgraph WSL["WSL2 Ubuntu - everything Nix-managed"]
-        HM["home-manager<br/>flake.nix + home.nix"]
-        HERDR["herdr<br/>workspaces, tabs, panes"]
-        BIN["nvim, zsh, starship, node,<br/>uv, direnv, ripgrep, fd, fzf, jq"]
-        subgraph CFG["home/ - live-symlinked config"]
-            NVIM["nvim/"]
-            HCFG["herdr/config.toml"]
-            AG["AGENTS.md"]
-        end
-        SEED["scripts/<br/>font + theme, at install only"]
-        PROJ["your projects<br/>flake.nix + .envrc each"]
-    end
-
-    HM -->|builds| BIN
-    HM -->|builds| HERDR
-    HM -->|mkOutOfStoreSymlink| CFG
-    HM -->|"nerd-fonts.hack + windows/"| SEED
-    SEED -->|"reg.exe, once"| WT
-    SEED --> FONT
-    WT ==>|attaches to| HERDR
-    HERDR --> BIN
-    BIN -.->|direnv loads| PROJ
-    AG -.->|symlinked| AGENTS["~/.codex/AGENTS.md<br/>~/.config/opencode/AGENTS.md"]
-
-    style WIN fill:#2a2438,stroke:#c4a7e7,color:#e0def4
-    style WSL fill:#232136,stroke:#9ccfd8,color:#e0def4
-    style CFG fill:#393552,stroke:#f6c177,color:#e0def4
-```
+<p align="center">
+  <img src="docs/assets/architecture.svg" width="900"
+       alt="One repo drives two sides. home-manager switch builds everything inside WSL2 Ubuntu: CLI tools, herdr, live-symlinked config, and per-project devshells loaded by direnv. bootstrap.sh and rebuild.sh push across the WSL/Windows boundary: the Hack Nerd Font on every rebuild, and the Windows Terminal colour scheme once at install. Windows Terminal attaches back to herdr.">
+</p>
 
 Config under `home/` is linked with `mkOutOfStoreSymlink`, so editing a file in
 this repo takes effect immediately with no rebuild. You only rebuild when you
