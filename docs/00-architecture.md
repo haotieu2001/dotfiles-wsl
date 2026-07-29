@@ -1,128 +1,121 @@
-# 00 - Architecture
+# 00 - How it is built
 
-Why this repo is shaped the way it is. Everything in the other docs follows
-from the four decisions on this page.
+Why this repo looks the way it does. Everything in the other docs comes from the
+four decisions below.
 
-## 1. There is no system layer
+## 1. Nothing controls the system, only your home folder
 
 A Nix setup on macOS or NixOS has two layers:
 
 ```
-nix-darwin / NixOS      -> manages the machine (services, defaults, users)
-  home-manager          -> manages $HOME (dotfiles, packages, shell)
+nix-darwin / NixOS      -> controls the machine (services, users, startup)
+  home-manager          -> controls your home folder (settings, packages, shell)
 ```
 
-WSL Ubuntu has no counterpart to the outer one. nix-darwin is macOS-only: it
-works by writing macOS `defaults`, managing launchd services and driving
-Homebrew, none of which exist here. NixOS would mean replacing Ubuntu entirely.
+WSL Ubuntu has nothing to put in the top layer. nix-darwin only works on macOS.
+NixOS would mean throwing away Ubuntu.
 
-So this repo runs **home-manager standalone**:
+So this repo uses **home-manager on its own**:
 
 ```
-home-manager (standalone)  -> manages $HOME
+home-manager (on its own)  -> controls your home folder
 ```
 
-Consequences that ripple through everything else:
+What follows from that:
 
-1. There is no `configuration.nix`. `home.nix` is the whole config.
+1. There is no `configuration.nix`. `home.nix` is the whole setup.
 2. The command is `home-manager switch`, not `darwin-rebuild` or `nixos-rebuild`.
-3. **No `sudo`.** Standalone home-manager only writes your home directory, and
-   must not be run as root. `bootstrap.sh` needs `sudo` twice, for `/etc/wsl.conf`
-   and `/etc/shells`, and nowhere else.
-4. The flake exposes `homeConfigurations."wsl"`.
-5. `apt` still works and is not the enemy. It is the escape hatch for the rare
-   thing nixpkgs cannot provide.
+3. **No `sudo`.** home-manager only writes inside your home folder. Do not run it
+   as root. `bootstrap.sh` needs `sudo` twice, for `/etc/wsl.conf` and
+   `/etc/shells`, and nowhere else.
+4. The flake gives you `homeConfigurations."wsl"`.
+5. `apt` still works. It is your way out when nixpkgs does not have something.
 
-This is a smaller surface than NixOS, and for a laptop that is the point:
-nothing outside `$HOME` can break, and a bad rebuild is undone by rolling back
-a generation.
+This does less than NixOS, and for a laptop that is good. Nothing outside your
+home folder can break, and a bad rebuild is undone by going back one step.
 
-## 2. The Windows boundary
+## 2. WSL and Windows are two different worlds
 
-WSL is a Linux VM. Anything that draws pixels, receives keystrokes from
-Windows, or is read by the Windows font renderer is a **Windows** program and
-cannot be installed by Nix inside WSL.
+WSL is a small Linux machine running inside Windows. Anything that draws on
+screen, takes your key presses, or is read by the Windows font system is a
+**Windows** program. Nix runs inside Linux, so it cannot install those.
 
-| Component | Runs where | Installed by |
+| Thing | Runs where | Installed by |
 | --- | --- | --- |
-| Windows Terminal | Windows | ships with Windows |
-| Hack Nerd Font | Windows (and Linux) | `home.nix`, copied across by `install-windows-font.sh` |
-| Terminal colour scheme | Windows | `windows/`, seeded once by `apply-windows-terminal-theme.sh` |
+| Windows Terminal | Windows | comes with Windows |
+| Hack Nerd Font | Windows and Linux | `home.nix`, copied over by `install-windows-font.sh` |
+| Terminal colours | Windows | `windows/`, copied once by `apply-windows-terminal-theme.sh` |
 | zsh, Starship, Neovim, herdr, CLI tools | WSL | `home.nix` |
-| Language runtimes for a project | WSL | that project's own `flake.nix` |
+| Language versions for a project | WSL | that project's own `flake.nix` |
 
-The config *files* all live in WSL, in this repo, and WSL pushes what Windows
-needs across the boundary itself through interop. There is no PowerShell step
-and nothing needs admin rights. Details in [09-windows-bridge.md](09-windows-bridge.md).
+All the files stay in Linux, in this repo. WSL then copies what Windows needs
+across by itself. There is no PowerShell step and you never need admin rights.
+See [09-windows-bridge.md](09-windows-bridge.md).
 
-## 3. Manage only what this repo owns outright
+## 3. Only manage files this repo owns
 
-The rule that decides what goes in and what stays out:
+This rule decides what goes in and what stays out:
 
-> If another program writes the file, or every value in it is taste rather than
-> correctness, this repo does not manage it.
+> If another program writes the file, or if every value in it is a matter of
+> taste, this repo leaves it alone.
 
-Applied consistently, it explains four decisions that otherwise look
-inconsistent:
+That one rule explains four choices that look different at first:
 
-**The font is managed.** It has a correct answer - the glyphs must exist, at a
-version matching the rest of the build - and nothing else on the machine
-manages it. It is re-pushed on every rebuild.
+**The font is managed.** There is a right answer: the font must exist, and match
+the version everything else was built with. Nothing else on the computer looks
+after it. So we copy it again on every rebuild.
 
-**The terminal theme is seeded, not managed.** `settings.json` is a file
-Windows Terminal itself rewrites every time you touch its Settings UI. A repo
-that reasserts its values on every rebuild fights the application for ownership
-and the user loses. But a *fresh machine* has no theme of yours to take away,
-so `bootstrap.sh` seeds one and then never touches the file again. Seed once,
-then hand off. See [05-terminal.md](05-terminal.md).
+**The terminal colours are set once, not managed.** Windows Terminal writes its
+own `settings.json` every time you change something in its Settings screen. If
+this repo wrote that file on every rebuild, the two would fight, and whoever ran
+last would win. But a **new computer** has no colours of yours to lose. So
+`bootstrap.sh` sets them once and then never touches the file again.
+See [05-terminal.md](05-terminal.md).
 
-**`~/.claude` is not managed.** Claude Code edits its own `settings.json` and
-`CLAUDE.md`, by the tool and by hand. Replacing them with read-only store
-symlinks silently displaces whatever was there. See [08-agents.md](08-agents.md).
+**`~/.claude` is left alone.** Claude Code writes its own `settings.json` and
+`CLAUDE.md`, both by itself and by hand. If we replaced them with read-only
+links, whatever was there would disappear. See [08-agents.md](08-agents.md).
 
-**Self-updating binaries are not managed.** Claude Code ships an updater that
-keeps itself current in `~/.local/bin`. Pinning it in the Nix store both
-freezes it and shadows the newer copy on `PATH`. Declarative packaging and
-self-updating binaries are a genuinely bad match.
+**Programs that update themselves are left alone.** Claude Code keeps itself up
+to date in `~/.local/bin`. If we pinned it in the Nix store, it would be frozen
+at one version and would also hide the newer copy. Programs that update
+themselves do not fit a system built on fixed versions.
 
-An earlier version of this repo shipped a `settings.ps1` that wrote Windows
-desktop preferences (dark mode, key repeat rate, taskbar autohide) to the
-registry. It was removed under the same rule: those are desktop appearance
-preferences, nothing reverts them, and shipping imperative registry writes
-under a banner of reproducibility was overclaiming.
+An older version of this repo wrote Windows desktop settings to the registry:
+dark mode, key repeat speed, taskbar hiding. We removed it, under the same rule.
+Those are personal taste, nothing undoes them, and calling them "repeatable" was
+claiming more than the repo could deliver.
 
-## 4. $HOME is global, projects are not
+## 4. Your home folder is shared, projects are not
 
-`home.nix` installs what should exist on every machine you own: git, Neovim,
-ripgrep, Node, uv, direnv. It deliberately does not install per-project
-language versions.
+`home.nix` installs what you want on every computer you own: git, Neovim,
+ripgrep, Node, uv, direnv. It does not install a language version for one
+project.
 
-Those live in each project's own `flake.nix`, loaded on `cd` by direnv and
-pinned by that project's `flake.lock`. A toolchain then travels with the repo
-instead of living on one laptop, and two projects can want different Python
-versions without a version manager arbitrating.
+Those live in each project's own `flake.nix`. direnv loads them when you walk
+into the folder, and that project's `flake.lock` writes down the versions. The
+tools then travel with the code instead of living on one laptop. Two projects
+can want different Python versions and nothing has to decide between them.
 
-This is the part that replaces nvm, pyenv, conda and `pip install --user`.
-See [11-devshells.md](11-devshells.md).
+This is what replaces nvm, pyenv, conda and `pip install --user`. See
+[11-devshells.md](11-devshells.md).
 
-## WSL-specific quirks worth knowing
+## Things that only happen on WSL
 
-These exist only because WSL has sharp edges a native Linux or macOS setup
-never hits:
+These come up because WSL is not quite a normal Linux machine:
 
-- **systemd is off by default** in older WSL images. Multi-user Nix runs a
-  daemon that the Determinate installer wires up through systemd, so
-  `bootstrap.sh` detects this, writes `/etc/wsl.conf`, and asks for one
-  `wsl --shutdown`.
-- **zsh has to be made the login shell.** Ubuntu logs you into bash, and `chsh`
-  refuses any shell not listed in `/etc/shells`, so bootstrap registers the Nix
-  zsh there first.
-- **The Neovim clipboard needs a bridge.** There is no X selection wired to
-  Windows, so yanks would vanish. `vim_config.lua` defines an explicit provider
-  using `clip.exe` and `powershell.exe`. See [06-neovim.md](06-neovim.md).
-- **`/mnt/c` is slow.** It is a 9p mount, drastically slower than the Linux
-  filesystem. zsh bounces back to `$HOME` if it starts under `/mnt`, and
-  `AGENTS.md` tells agents not to put repos there.
-- **DNS is flaky during first boot.** WSL routes DNS through a host proxy that
-  is briefly unreachable while systemd and the Nix daemon settle, so the first
-  `home-manager switch` retries rather than failing outright.
+- **systemd is off by default** in older WSL images. Nix runs a background
+  service that needs it. `bootstrap.sh` notices, writes `/etc/wsl.conf`, and asks
+  you to run `wsl --shutdown` once.
+- **zsh has to be made the login shell.** Ubuntu starts you in bash. The `chsh`
+  command refuses any shell that is not listed in `/etc/shells`, so bootstrap
+  adds the Nix zsh there first.
+- **Copy and paste in Neovim needs help.** WSL has no connection to the Windows
+  clipboard, so copied text would vanish. `vim_config.lua` uses `clip.exe` and
+  `powershell.exe` instead. See [06-neovim.md](06-neovim.md).
+- **`/mnt/c` is slow.** That is the Windows disk seen from Linux, and it is much
+  slower than the Linux disk. zsh jumps back to your home folder if it starts
+  under `/mnt`, and `AGENTS.md` tells AI tools not to put code there.
+- **The network is shaky at first.** WSL sends DNS through Windows, and that is
+  briefly unavailable while things start up. So the first build tries three times
+  before giving up.
