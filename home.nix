@@ -39,10 +39,9 @@ in
     nodejs_24
     uv
 
-    # Loads a project's devShell on `cd` and unloads it on the way out.
-    # Pointless without the programs.direnv block further down, which is what
-    # actually hooks it into zsh.
-    direnv
+    # direnv is deliberately NOT listed here. The programs.direnv block further
+    # down already installs it; listing it again is a second, redundant path to
+    # the same package.
 
     # claude-code is deliberately NOT here. It ships a self-updater that keeps
     # itself current in ~/.local/bin; pinning it in the Nix store freezes it at
