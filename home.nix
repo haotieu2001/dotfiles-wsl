@@ -63,6 +63,22 @@ in
     EDITOR = "nvim";
   };
 
+  # Tools that install themselves into ~/.local/bin need that directory on
+  # PATH, and nothing else puts it there for a zsh login shell. Ubuntu adds it
+  # from ~/.profile, which bash reads and zsh does not.
+  #
+  # This matters because the package list above deliberately leaves claude-code
+  # out: it self-updates, and the Nix store is read-only. Without this line the
+  # config says "claude lives in ~/.local/bin" and then hands you a shell that
+  # cannot find it. Same for anything installed by `pip install --user`.
+  #
+  # Ordering is the point. home-manager writes this into ~/.zshenv, which zsh
+  # reads *before* ~/.zprofile, and .zprofile is where the Nix profile goes on
+  # PATH. So the Nix copy still wins for anything home.nix declares, and
+  # ~/.local/bin only answers for what Nix does not manage. Reversing that
+  # order is exactly the drift scripts/check-drift.sh reports.
+  home.sessionPath = [ "$HOME/.local/bin" ];
+
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;      # ghost text from history
