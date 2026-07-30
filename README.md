@@ -331,4 +331,4 @@ look like bugs but are not, and a symptom-to-fix table.
 
 ## License
 
-MIT-0.
+[MIT](LICENSE). Use it, change it, ship it. Keep the copyright notice.
