@@ -28,7 +28,7 @@ in
     neovim
     git
     gh        # github cli: PRs, releases, and the thing that holds the API token
-
+    tree
     herdr     # agent multiplexer
 
     # Language toolchains that used to be installed by hand: node came from
