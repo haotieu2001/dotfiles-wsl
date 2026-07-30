@@ -329,11 +329,6 @@ themselves, like Claude Code, are also left alone. See
 does, which one to open when you want to change something, the decisions that
 look like bugs but are not, and a symptom-to-fix table.
 
-## Credit
-
-Based on a macOS nix-darwin setup by
-[kunchenguid](https://github.com/kunchenguid/dotfiles).
-
 ## License
 
 MIT-0.
