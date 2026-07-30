@@ -64,7 +64,6 @@ Set it once, to the release you first installed, and never touch it again. It is
     herdr
     nodejs_24
     uv
-    direnv
     nerd-fonts.hack
   ];
 ```
@@ -81,8 +80,11 @@ instead of living on one laptop. See [11-devshells.md](11-devshells.md).
 `uv tool install` outside any project. Before, Node came from nvm and uv was a
 file downloaded by hand into `~/.local/bin`. Neither survived a new computer.
 
-`direnv` does nothing by itself. The `programs.direnv` block further down is
-what connects it to zsh.
+`direnv` is **not** in this list, even though you get it. The `programs.direnv`
+block further down installs it *and* connects it to zsh, so naming it here as
+well would be a second, redundant path to the same package. The rule: if a
+`programs.*` block already enables a tool, do not also list it in
+`home.packages`.
 
 `gh` fills a gap that an SSH key cannot. An SSH key only proves who you are for
 git itself: clone, fetch, push. Pull requests are not git. Making and merging

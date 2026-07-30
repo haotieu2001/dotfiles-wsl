@@ -253,7 +253,7 @@ happening, you are probably still in bash. Finish the `chsh` step.
 
 ### `direnv: command not found`
 
-`direnv` is in `home.packages` and connected to zsh by `programs.direnv`. Run
+`direnv` is installed and connected to zsh by `programs.direnv`. Run
 `./rebuild.sh` and open a new shell. The connection is written into your
 `.zshrc`, which a shell that is already open has not read.
 
