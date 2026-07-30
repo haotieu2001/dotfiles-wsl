@@ -1,6 +1,6 @@
 # herdr - agent-aware terminal multiplexer.
 #
-# On macOS the video installs this with `brews = [ "herdr" ]`. There is no
+# A macOS setup installs this with `brews = [ "herdr" ]`. There is no
 # Homebrew here and herdr is not in nixpkgs, so we fetch the upstream release
 # binary and pin it by hash. That keeps the install reproducible: the same
 # flake.lock + the same hash always yields the same herdr.

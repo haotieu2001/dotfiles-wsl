@@ -112,13 +112,6 @@ icons, sign out of Windows and back in. Windows needs this to notice a new font.
 ./rebuild.sh       # apply any change to packages, shell or editor
 ```
 
-You do **not** need to rebuild after editing files in `home/` (Neovim, herdr,
-`AGENTS.md`). Those are linked, so changes work right away. Rebuild only when you
-change which packages Nix installs.
-
-`rebuild.sh` does not touch your terminal colours. See
-[the reference](docs/README.md#the-terminal) to learn why.
-
 **The rule to remember:** files under `home/` are symlinked, so editing one
 takes effect immediately. Everything else is built by Nix and needs a rebuild.
 
@@ -130,6 +123,9 @@ takes effect immediately. Everything else is built by Nix and needs a rebuild.
 
 After a rebuild, open a new shell. Aliases and `$EDITOR` are set when a shell
 starts, so one you already had open will not see them.
+
+`rebuild.sh` never touches your terminal colours. See
+[the reference](docs/README.md#the-terminal) to learn why.
 
 Check nothing has drifted away from what the repo declares:
 
@@ -329,14 +325,14 @@ themselves, like Claude Code, are also left alone. See
 
 ## Reference
 
-[docs/README.md](docs/README.md) lists every file, what it does, and which one
-to open when you want to change something. It also has the short list of
-decisions that look like bugs and are not, and a table of things that break.
+[docs/README.md](docs/README.md) is the full reference: every file and what it
+does, which one to open when you want to change something, the decisions that
+look like bugs but are not, and a symptom-to-fix table.
 
 ## Credit
 
 Based on a macOS nix-darwin setup by
-[kunchenguid](https://github.com/kunchenguid/dotfiles). Not an official version.
+[kunchenguid](https://github.com/kunchenguid/dotfiles).
 
 ## License
 
