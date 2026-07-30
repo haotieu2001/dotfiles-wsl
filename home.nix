@@ -35,7 +35,7 @@ in
     # nvm, uv from a curl'd binary in ~/.local/bin. Neither survived a new
     # machine, which defeated the point of the repo. These are the versions
     # that should exist on *every* machine; per-project versions belong in
-    # that project's own flake instead. See docs/11-devshells.md.
+    # that project's own flake instead. See docs/README.md.
     nodejs_24
     uv
 
@@ -117,7 +117,7 @@ in
   # nix-direnv makes it usable day to day: plain direnv re-evaluates the whole
   # flake on every `cd`, which takes seconds, and keeps no GC root so your
   # toolchain gets garbage-collected out from under you. nix-direnv caches the
-  # result and pins it. See docs/11-devshells.md.
+  # result and pins it. See docs/README.md.
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
@@ -137,7 +137,7 @@ in
   # No terminal config is managed here either. The terminal is a Windows
   # process that cannot read Linux dotfiles, and its settings.json is edited
   # through its own UI - every value in it is a matter of taste. Only the font
-  # crosses the boundary. See docs/05-terminal.md.
+  # crosses the boundary. See docs/README.md.
 
   home.file.".codex/AGENTS.md".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/AGENTS.md";

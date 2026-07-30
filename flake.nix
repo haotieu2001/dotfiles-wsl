@@ -11,7 +11,7 @@
 
     # No nix-darwin and no nix-homebrew here. WSL Ubuntu is not NixOS, so there
     # is no system-level Nix module to hook into: home-manager runs standalone
-    # and owns everything under $HOME. See docs/01-flake-nix.md.
+    # and owns everything under $HOME. See docs/README.md.
   };
 
   outputs = { self, nixpkgs, home-manager, ... }:
@@ -45,7 +45,7 @@
       #
       # This config owns $HOME, not your projects. A project's toolchain
       # belongs in that project, pinned by its own flake.lock, so it travels
-      # with the repo instead of living on one laptop. See docs/11-devshells.md.
+      # with the repo instead of living on one laptop. See docs/README.md.
       templates = {
         python = {
           path = ./templates/python;

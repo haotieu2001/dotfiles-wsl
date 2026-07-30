@@ -28,7 +28,7 @@ had before.
 - [Making changes](#making-changes)
 - [What is in this repo](#what-is-in-this-repo)
 - [What this repo can and cannot rebuild](#what-this-repo-can-and-cannot-rebuild)
-- [Docs](#docs)
+- [Reference](#reference)
 
 ## How it works
 
@@ -115,7 +115,7 @@ You do **not** need to rebuild after editing files in `home/` (Neovim, herdr,
 change which packages Nix installs.
 
 `rebuild.sh` does not touch your terminal colours. See
-[the terminal doc](docs/05-terminal.md) to learn why.
+[the reference](docs/README.md#the-terminal) to learn why.
 
 To start the terminal multiplexer, run `herdr`. The keys are the same as tmux:
 `ctrl+b` first, then `c` for a new tab, `%` or `"` to split the window.
@@ -150,7 +150,7 @@ The versions are written down in the project's own `flake.lock`. So they travel
 with the code, instead of living on one laptop.
 
 This replaces nvm, pyenv, conda and `pip install --user`. Read more in
-[docs/11-devshells.md](docs/11-devshells.md).
+[the reference](docs/README.md#per-project-tools).
 
 ## Making changes
 
@@ -178,7 +178,7 @@ opencode all read it. No rebuild needed.
 whatever you like. You only need Hack Nerd Font and truecolor support. You can
 also add `wezterm` or `kitty` to `home.packages` and run it as a Linux window
 through WSLg. That is fully repeatable, but text looks blurrier and typing feels
-slower. See [docs/05-terminal.md](docs/05-terminal.md).
+slower. See [the reference](docs/README.md#the-terminal).
 
 ## What is in this repo
 
@@ -211,7 +211,7 @@ dotfiles-wsl/
 │               ├── plugin.lua      # lazy.nvim setup
 │               ├── keys.lua
 │               └── plugins/        # one file per plugin
-└── docs/                           # what every file does, line by line
+└── docs/README.md                  # what every file does, and when to edit it
 ```
 
 ## What this repo can and cannot rebuild
@@ -237,25 +237,13 @@ it, because it claimed more than it could deliver.
 **On purpose, not locked**: Neovim plugins, managed by lazy.nvim. Commit
 `home/.config/nvim/lazy-lock.json` if you want to lock them. AI tools that update
 themselves, like Claude Code, are also left alone. See
-[docs/08-agents.md](docs/08-agents.md).
+[the reference](docs/README.md#decisions-that-will-surprise-you).
 
-## Docs
+## Reference
 
-| Doc | What it covers |
-| --- | --- |
-| [00 - How it is built](docs/00-architecture.md) | The four decisions behind the repo |
-| [01 - flake.nix](docs/01-flake-nix.md) | Versions, locking, and templates |
-| [02 - home.nix](docs/02-home-nix.md) | Packages, zsh, Starship, direnv, links |
-| [03 - modules/herdr.nix](docs/03-modules-herdr-nix.md) | How to package a downloaded program |
-| [04 - The two scripts](docs/04-bootstrap-and-rebuild.md) | `bootstrap.sh` and `rebuild.sh`, step by step |
-| [05 - The terminal](docs/05-terminal.md) | Setting colours once, and why only once |
-| [06 - Neovim](docs/06-neovim.md) | Every Lua file, and the copy-paste fix |
-| [07 - herdr](docs/07-herdr.md) | Keys, and running AI tools side by side |
-| [08 - AI tools](docs/08-agents.md) | `AGENTS.md`, and what this repo will not touch |
-| [09 - Talking to Windows](docs/09-windows-bridge.md) | The two scripts that cross over |
-| [10 - When things break](docs/10-troubleshooting.md) | Problems you may hit on WSL |
-| [11 - Tools per project](docs/11-devshells.md) | flakes and direnv |
-| [12 - Checking for drift](docs/12-drift.md) | Finding software Nix does not manage |
+[docs/README.md](docs/README.md) lists every file, what it does, and which one
+to open when you want to change something. It also has the short list of
+decisions that look like bugs and are not, and a table of things that break.
 
 ## Credit
 
