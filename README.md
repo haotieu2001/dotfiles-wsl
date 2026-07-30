@@ -24,6 +24,8 @@ had before.
 - [Before you start](#before-you-start)
 - [Install](#install)
 - [Everyday use](#everyday-use)
+- [Neovim](#neovim)
+- [herdr](#herdr)
 - [Tools for one project](#tools-for-one-project)
 - [Making changes](#making-changes)
 - [What is in this repo](#what-is-in-this-repo)
@@ -117,8 +119,94 @@ change which packages Nix installs.
 `rebuild.sh` does not touch your terminal colours. See
 [the reference](docs/README.md#the-terminal) to learn why.
 
-To start the terminal multiplexer, run `herdr`. The keys are the same as tmux:
-`ctrl+b` first, then `c` for a new tab, `%` or `"` to split the window.
+**The rule to remember:** files under `home/` are symlinked, so editing one
+takes effect immediately. Everything else is built by Nix and needs a rebuild.
+
+| You changed | Rebuild? |
+| --- | --- |
+| `home.nix`, `flake.nix` | yes, then open a new shell |
+| Neovim, herdr, `AGENTS.md` (under `home/`) | no |
+| Windows Terminal settings | no, it is a Windows program |
+
+After a rebuild, open a new shell. Aliases and `$EDITOR` are set when a shell
+starts, so one you already had open will not see them.
+
+Check nothing has drifted away from what the repo declares:
+
+```bash
+./scripts/check-drift.sh
+```
+
+## Neovim
+
+Run `nvim`. The leader key is **space**. Press it and wait: which-key pops up a
+list of what is available, so you do not have to memorise this table.
+
+| Key | Does |
+| --- | --- |
+| `space` `f` | Find files by name |
+| `space` `s` | Search text across the project |
+| `space` `b` | Switch between open buffers |
+| `space` `e` | File browser, edit the folder like a document |
+| `space` `g` | Git interface (stage, commit, branch, diff) |
+| `gd` | Go to definition |
+| `Esc` | **Save.** Not "leave insert mode only" |
+| `ctrl+a` | Select all |
+
+If you are new to vim: `i` starts typing, `Esc` saves and stops typing, `:q`
+quits, `:wq` saves and quits. `dd` deletes a line, `u` undoes, `ctrl+r` redoes.
+
+Three things behave differently from stock vim on purpose:
+
+- **`Esc` saves the file.** Convenient, and worth knowing before it surprises you.
+- **Pasting over selected text keeps your clipboard.** Normally vim replaces
+  your clipboard with whatever you just overwrote. Here you can paste the same
+  thing repeatedly.
+- **Copy and paste reach Windows.** Yanking puts text on the Windows clipboard
+  and `ctrl+v` from a Windows app works, because the config routes through
+  `clip.exe` and `powershell.exe`. WSL has no other way to do this.
+
+Line numbers are relative, so `5k` jumps up five lines. Search is
+case-insensitive unless you type a capital. Undo survives closing the file.
+
+To add a plugin, drop a file into `home/.config/nvim/lua/plugins/`. lazy.nvim
+loads everything in that folder. No rebuild needed.
+
+## herdr
+
+A terminal multiplexer: many terminals in one window, and they keep running
+when you close the window. Useful for leaving builds or AI agents working.
+
+```bash
+herdr
+```
+
+Every shortcut starts with the **prefix**, `ctrl+b`. Press it, let go, then
+press the next key.
+
+| Prefix then | Does |
+| --- | --- |
+| `?` | **Show every shortcut.** Start here |
+| `c` | New tab |
+| `&` | Close tab |
+| `"` | Split top and bottom |
+| `%` | Split left and right |
+| `h` `j` `k` `l` | Move between panes, left/down/up/right |
+| `w` | Workspace picker |
+| `g` | Jump to a specific tab |
+| `y` | Copy mode, to scroll back and select text |
+| `q` | Detach, leaving everything running |
+
+In copy mode: `v` or `space` starts selecting, `y` or `Enter` copies, `q` or
+`Esc` leaves. Those are fixed by herdr and cannot be reconfigured.
+
+Note `q` detaches, not `d` as in tmux.
+
+Detaching is the whole point of using herdr. Close the terminal, come back
+later, run `herdr` again and you are reattached with everything still running.
+
+The keys live in `home/.config/herdr/config.toml`. It is symlinked, so edits
+apply to the next herdr you start, with no rebuild.
 
 ## Tools for one project
 
