@@ -389,6 +389,28 @@ A broken link means `~/.dotfiles` is not pointing at the repo. Run
 
 ## General
 
+### A tool is a different version from the one `home.nix` says
+
+Something outside Nix is on your `PATH` first and winning. This is common with
+Node, where nvm or fnm keeps its own copy. Check what you are really running:
+
+```bash
+command -v node      # want ~/.nix-profile/bin/node
+```
+
+To find every case of this at once:
+
+```bash
+./scripts/check-drift.sh
+```
+
+See [12-drift.md](12-drift.md).
+
+### I added a package but the command is not found
+
+The build has it, your profile does not. Run `./rebuild.sh`, then open a new
+shell. `./scripts/check-drift.sh` lists everything in this state.
+
 ### Everything broke after I moved the repo
 
 Every link goes through `~/.dotfiles`. Point it at the new place:

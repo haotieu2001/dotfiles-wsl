@@ -191,7 +191,8 @@ dotfiles-wsl/
 ├── rebuild.sh                      # the everyday command
 ├── scripts/
 │   ├── install-windows-font.sh     # font to Windows, every rebuild
-│   └── apply-windows-terminal-theme.sh   # colours to Windows, install only
+│   ├── apply-windows-terminal-theme.sh   # colours to Windows, install only
+│   └── check-drift.sh              # what is installed outside Nix
 ├── windows/                        # what gets copied to the Windows side
 │   ├── blackpanther.json           # the colour scheme
 │   ├── profile-defaults.json       # font, see-through level, padding, cursor
@@ -254,6 +255,7 @@ themselves, like Claude Code, are also left alone. See
 | [09 - Talking to Windows](docs/09-windows-bridge.md) | The two scripts that cross over |
 | [10 - When things break](docs/10-troubleshooting.md) | Problems you may hit on WSL |
 | [11 - Tools per project](docs/11-devshells.md) | flakes and direnv |
+| [12 - Checking for drift](docs/12-drift.md) | Finding software Nix does not manage |
 
 ## Credit
 

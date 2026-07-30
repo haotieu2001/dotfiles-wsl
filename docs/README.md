@@ -19,6 +19,7 @@ decisions behind everything else.
 | [09 - Talking to Windows](09-windows-bridge.md) | The two scripts that cross over |
 | [10 - When things break](10-troubleshooting.md) | Problems you may hit on WSL |
 | [11 - Tools per project](11-devshells.md) | flakes and direnv |
+| [12 - Checking for drift](12-drift.md) | Finding software Nix does not manage |
 
 ## What to read first
 
@@ -31,3 +32,6 @@ decisions behind everything else.
 **If you want to change something:** [02](02-home-nix.md) for packages and
 shell, [11](11-devshells.md) for project tools, [05](05-terminal.md) for the
 terminal, [06](06-neovim.md) for the editor, [08](08-agents.md) for AI tools.
+
+**Before setting up a second machine:** [12](12-drift.md), to find anything on
+this one that Nix is not managing and would not follow you across.
