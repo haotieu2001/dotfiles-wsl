@@ -67,6 +67,32 @@ in
     enable = true;
     autosuggestion.enable = true;      # ghost text from history
     syntaxHighlighting.enable = true;  # commands turn green when valid
+
+    # Put Nix on PATH for login shells. This writes ~/.zprofile.
+    #
+    # The Nix installer drops its setup script in /etc/profile.d/nix.sh, which
+    # only shells that read /etc/profile ever see. bash does. zsh does not,
+    # unless the distro ships /etc/zsh/zprofile to forward it, and Ubuntu only
+    # ships that with its own zsh package - which we do not install, because
+    # zsh comes from Nix here.
+    #
+    # So on a machine where step 6 of bootstrap.sh succeeds and zsh really
+    # becomes the login shell, that shell starts with no Nix on PATH at all:
+    # no nvim, no git, no herdr, not even nix itself. It only ever appeared to
+    # work on machines where `chsh` failed, because the ~/.bashrc fallback runs
+    # /etc/profile first and the `exec zsh` inherits an already-correct PATH.
+    #
+    # Found by installing on a clean WSL instance. It cannot be reproduced on a
+    # machine that is already set up, which is the entire argument for testing
+    # against a fresh one.
+    profileExtra = ''
+      if [ -e /etc/profile.d/nix.sh ]; then
+        . /etc/profile.d/nix.sh
+      elif [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+      fi
+    '';
+
     initContent = ''
       bindkey '^f' autosuggest-accept
 
