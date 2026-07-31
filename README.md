@@ -12,7 +12,7 @@ had before.
 - Packages installed by Nix, so everyone gets the same versions
 - zsh, with command suggestions and colours
 - The Starship prompt
-- Neovim, set up and ready
+- Neovim, set up and ready, with language servers so go-to-definition works
 - herdr, a tool for running many terminals in one window
 - One `AGENTS.md` file that every AI coding tool reads
 - Hack Nerd Font, installed on the Windows side
@@ -174,6 +174,12 @@ Three things behave differently from stock vim on purpose:
 Line numbers are relative, so `5k` jumps up five lines. Search is
 case-insensitive unless you type a capital. Undo survives closing the file.
 
+Language servers are wired up for Lua, Nix, Python, JavaScript/TypeScript and
+Bash, so `gd`, diagnostics and hover work in those files. The servers come from
+`home.packages`, not from mason, so they are pinned by `flake.lock` and appear
+on a new machine like every other tool. Adding another means adding the package
+in `home.nix` and its name in `home/.config/nvim/lua/plugins/lsp.lua`.
+
 To add a plugin, drop a file into `home/.config/nvim/lua/plugins/`. lazy.nvim
 loads everything in that folder. No rebuild needed.
 
@@ -334,6 +340,10 @@ undoes a change you make yourself.
 **Not managed at all**: Windows Terminal itself, and Windows desktop settings.
 An older version of this repo wrote Windows settings to the registry. We removed
 it, because it claimed more than it could deliver.
+
+**Always the same**, and worth calling out because editors usually get this
+wrong: the language servers. They are ordinary Nix packages, so the version that
+answers `gd` here is the version that answers it on the next machine.
 
 **On purpose, not locked**: Neovim plugins, managed by lazy.nvim. Commit
 `home/.config/nvim/lazy-lock.json` if you want to lock them. AI tools that update

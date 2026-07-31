@@ -75,7 +75,8 @@ the file in this repo *is* the file the program reads. Edit and it takes effect.
 | `home/.config/nvim/lua/vim_config.lua` | Editor settings, and the WSL clipboard bridge. |
 | `home/.config/nvim/lua/plugin.lua` | Bootstraps lazy.nvim and tells it to load every file in `plugins/`. |
 | `home/.config/nvim/lua/keys.lua` | Key bindings. `Esc` saves, `ctrl+a` selects all, and `p` over a selection keeps your clipboard. |
-| `home/.config/nvim/lua/plugins/*.lua` | One file per group of plugins: `colorscheme`, `git`, `navigation`, `ui`. Drop in a new file to add a plugin. |
+| `home/.config/nvim/lua/plugins/*.lua` | One file per group of plugins: `colorscheme`, `git`, `lsp`, `navigation`, `ui`. Drop in a new file to add a plugin. |
+| `home/.config/nvim/lua/plugins/lsp.lua` | Enables the language servers declared in `home.nix`. No `setup()` calls: Neovim 0.11+ reads nvim-lspconfig's per-server config itself via `vim.lsp.enable`. |
 
 The clipboard bridge in `vim_config.lua` is the one part worth knowing about.
 `clipboard = 'unnamedplus'` works on macOS because Neovim finds `pbcopy`. A WSL
@@ -170,6 +171,13 @@ It lives in `~/.local/bin` on purpose.
 `settings.json`, so home-manager replacing it with a store symlink would
 silently displace whatever was there. Only symlink files this repo owns
 outright.
+
+**Language servers are not installed by mason.** mason downloads binaries into
+`~/.local/share/nvim`, which are unpinned, absent on a new machine, and exactly
+the drift `check-drift.sh` reports. They are in `home.packages` instead, so a
+server is as reproducible as `ripgrep`. A server that is enabled in `lsp.lua`
+but not installed is silently skipped, so the two lists can drift apart without
+breaking anything.
 
 **`direnv` is not in `home.packages`.** The `programs.direnv` block installs it
 *and* wires it into zsh. Listing it in both places is a redundant second path to
