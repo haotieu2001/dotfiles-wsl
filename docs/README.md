@@ -56,7 +56,7 @@ offers to set it for you.
 | `bootstrap.sh` | once, on a new machine | Steps 0-8: checks WSL, turns on systemd, installs Determinate Nix, links `~/.dotfiles`, sets your username, first build, makes zsh your login shell, installs the font, seeds terminal colours. |
 | `rebuild.sh` | every time you change a build file | `home-manager switch`, then pushes the font to Windows. Safe to run repeatedly. |
 | `scripts/install-windows-font.sh` | from `bootstrap.sh` and every `rebuild.sh` | Copies Hack Nerd Font from the Nix store into the Windows font folder, so the font version is pinned by `flake.lock` like everything else. |
-| `scripts/apply-windows-terminal-theme.sh` | from `bootstrap.sh` **only**, once | Merges `windows/*.json` into Windows Terminal's `settings.json`. Backs the file up first, and refuses to overwrite a scheme that is already there unless you pass `--force`. |
+| `scripts/apply-windows-terminal-theme.sh` | from `bootstrap.sh` **only**, once | Merges `windows/*.json` into Windows Terminal's `settings.json`. Backs the file up first, and refuses to overwrite a scheme that is already there unless you pass `--force`. Skip it at install time with `DOTFILES_SKIP_THEME=1 ./bootstrap.sh`. |
 | `scripts/check-drift.sh` | whenever you want | Reports software installed outside Nix, and tools where a non-Nix copy is winning on `PATH`. Read-only. Exit 1 means real drift. |
 
 `bootstrap.sh` is safe to re-run. If step 1 asks you to run `wsl --shutdown`, do
@@ -104,6 +104,25 @@ made yourself.
 So: change colours **now** in the Settings screen. Change what the **next**
 machine gets by editing `windows/*.json`. To pull your edited files onto this
 machine as well, run the script with `--force`.
+
+### If you cloned this and want your own theme
+
+The one-time seed still overwrites `colorScheme`, `font`, `opacity`, `padding`,
+`cursorShape` and the background image. Everything else in `profiles.defaults`
+survives, your own schemes stay in `.schemes`, and the old file is backed up as
+`settings.json.pre-dotfiles-wsl.*`. Three ways out:
+
+- **Keep your look:** `DOTFILES_SKIP_THEME=1 ./bootstrap.sh`. You still get the
+  font, which is the only part the terminal genuinely needs from this repo.
+- **Undo it after the fact:** pick your scheme again in the Settings screen. The
+  seed-once guard then leaves you alone forever, including on re-runs.
+- **Ship yours instead:** replace `windows/blackpanther.{json,jpg}` and point
+  `SCHEME_FILE` / `IMAGE_FILE` at the top of the script at them.
+
+The scheme's `name` and `colorScheme` in `profile-defaults.json` must agree.
+The script checks and refuses to run otherwise: Windows Terminal ignores a
+`colorScheme` it cannot resolve, so a mismatch shows up as "the theme did
+nothing" rather than as an error.
 
 Nothing here requires Windows Terminal. Any terminal with truecolor and Hack
 Nerd Font works.
@@ -162,6 +181,12 @@ first git comes from apt; this one is pinned and wins once you have installed.
 **Neovim plugins are not pinned.** lazy.nvim manages them, and
 `lazy-lock.json` is gitignored. Delete that line from `.gitignore` if you want
 them locked.
+
+**The seed-once guard looks up the scheme by the name in `windows/*.json`,
+not a hardcoded one.** It used to hardcode `blackpanther` while the merge read
+the name from the file. Any fork that renamed its scheme therefore never
+tripped the guard and had the theme reasserted on every `bootstrap.sh` run -
+the exact behaviour the script exists to prevent.
 
 **Windows settings outside the terminal are not managed.** An earlier version of
 this repo wrote to the Windows registry. It was removed for claiming more than

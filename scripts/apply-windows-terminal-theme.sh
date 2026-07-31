@@ -32,6 +32,13 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
+# The two files the theme is made of. To ship your own, drop your files in
+# windows/ and point these at them. The scheme's *name* is read out of the JSON
+# rather than written here, so renaming the scheme cannot get out of step with
+# the seed-once guard below - which is exactly what used to happen.
+SCHEME_FILE="$REPO/windows/blackpanther.json"
+IMAGE_FILE="$REPO/windows/blackpanther.jpg"
+
 info() { printf '    %s\n' "$*"; }
 warn() { printf '    ! %s\n' "$*" >&2; }
 
@@ -47,6 +54,21 @@ for bin in cmd.exe wslpath jq; do
     exit 1
   }
 done
+
+[ -f "$SCHEME_FILE" ] || { warn "no colour scheme at $SCHEME_FILE"; exit 1; }
+SCHEME_NAME="$(jq -r '.name // empty' "$SCHEME_FILE" 2>/dev/null || true)"
+[ -n "$SCHEME_NAME" ] || { warn "$SCHEME_FILE has no \"name\" field"; exit 1; }
+
+# Windows Terminal matches a profile's colorScheme against a scheme by name, so
+# these two files have to agree. If they do not, the merge below writes a
+# colorScheme that resolves to nothing and the terminal quietly keeps its old
+# colours - a silent failure, same shape as the font-family one.
+WANTED_SCHEME="$(jq -r '.colorScheme // empty' "$REPO/windows/profile-defaults.json" 2>/dev/null || true)"
+if [ -n "$WANTED_SCHEME" ] && [ "$WANTED_SCHEME" != "$SCHEME_NAME" ]; then
+  warn "profile-defaults.json asks for colorScheme \"$WANTED_SCHEME\" but"
+  warn "$(basename "$SCHEME_FILE") defines \"$SCHEME_NAME\". Make them match."
+  exit 1
+fi
 
 # Ask Windows for its user profile rather than guessing: the Windows and WSL
 # usernames are frequently different.
@@ -95,13 +117,19 @@ fi
 # though the terminal reads it fine. Bail out rather than mangle it.
 if ! jq empty "$SETTINGS" >/dev/null 2>&1; then
   warn "settings.json is not strict JSON (comments or trailing commas?)."
-  warn "Remove them, or apply windows/blackpanther.json by hand. Not touching it."
+  warn "Remove them, or apply $(basename "$SCHEME_FILE") by hand. Not touching it."
   exit 0
 fi
 
 # --- seed-once guard --------------------------------------------------------
+# Look for the scheme *this repo ships*, whatever it is called. Hardcoding
+# "blackpanther" here while the merge below took the name from the JSON meant a
+# fork that renamed its scheme never tripped this guard, so every bootstrap run
+# reasserted the theme over whatever the user had chosen - the precise fight
+# this script's header says it exists to avoid.
 if [ "$FORCE" -eq 0 ] && \
-   jq -e '.schemes // [] | any(.name == "blackpanther")' "$SETTINGS" >/dev/null 2>&1; then
+   jq -e --arg name "$SCHEME_NAME" \
+      '.schemes // [] | any(.name == $name)' "$SETTINGS" >/dev/null 2>&1; then
   info "theme already present; leaving your terminal settings alone"
   info "(use --force to overwrite them with the committed theme)"
   exit 0
@@ -111,19 +139,21 @@ fi
 # Copied out of the repo to a stable Windows-side location. Windows Terminal is
 # a Windows process, so it needs a real Windows path; pointing it at
 # \\wsl.localhost works but is slow to read and breaks if the distro is renamed.
-IMG_SRC="$REPO/windows/blackpanther.jpg"
 IMG_WIN_PATH=""
-if [ -f "$IMG_SRC" ]; then
+if [ -f "$IMAGE_FILE" ]; then
+  IMG_NAME="$(basename "$IMAGE_FILE")"
   IMG_DEST_DIR="$WIN_HOME/AppData/Local/dotfiles-wsl"
   mkdir -p "$IMG_DEST_DIR"
-  cp -f "$IMG_SRC" "$IMG_DEST_DIR/blackpanther.jpg"
-  IMG_WIN_PATH="$(wslpath -w "$IMG_DEST_DIR/blackpanther.jpg")"
+  cp -f "$IMAGE_FILE" "$IMG_DEST_DIR/$IMG_NAME"
+  IMG_WIN_PATH="$(wslpath -w "$IMG_DEST_DIR/$IMG_NAME")"
 else
-  warn "windows/blackpanther.jpg missing; applying the theme without a background"
+  warn "$(basename "$IMAGE_FILE") missing; applying the theme without a background"
 fi
 
 # --- merge ------------------------------------------------------------------
-BACKUP="$SETTINGS.pre-dotfiles-wsl.$(date +%Y%m%d%H%M%S)"
+# $$ disambiguates two runs inside the same second, which would otherwise write
+# the same backup name and lose the first one.
+BACKUP="$SETTINGS.pre-dotfiles-wsl.$(date +%Y%m%d%H%M%S).$$"
 cp -f "$SETTINGS" "$BACKUP"
 
 # Build the defaults we are about to merge, substituting the real image path
@@ -146,7 +176,7 @@ trap 'rm -f "$TMP"' EXIT
 #   defaults - `*` recursive-merges, so keys we do not mention (startingDirectory,
 #              your own tweaks) survive untouched.
 jq \
-  --slurpfile scheme "$REPO/windows/blackpanther.json" \
+  --slurpfile scheme "$SCHEME_FILE" \
   --argjson defaults "$DEFAULTS" \
   '
     .schemes = ((.schemes // []) | map(select(.name != $scheme[0].name)) + [$scheme[0]])
@@ -158,5 +188,5 @@ jq \
 jq empty "$TMP" >/dev/null 2>&1 || { warn "merge produced invalid JSON; settings left untouched"; exit 1; }
 cp -f "$TMP" "$SETTINGS"
 
-info "applied the blackpanther theme (backup: $(basename "$BACKUP"))"
+info "applied the $SCHEME_NAME theme (backup: $(basename "$BACKUP"))"
 info "Windows Terminal picks this up on its next launch"
