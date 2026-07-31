@@ -39,6 +39,18 @@ in
     nodejs_24
     uv
 
+    # Language servers for Neovim, so `gd` and diagnostics actually work.
+    #
+    # From nixpkgs rather than mason on purpose. mason fetches its own binaries
+    # into ~/.local/share/nvim: not in flake.lock, not on the next machine, and
+    # exactly the drift scripts/check-drift.sh reports. A language server is a
+    # tool like any other, so it is pinned like any other.
+    lua-language-server          # this config
+    nil                          # nix files: home.nix, flake.nix
+    basedpyright                 # python
+    typescript-language-server   # javascript, typescript
+    bash-language-server         # bootstrap.sh and scripts/
+
     # direnv is deliberately NOT listed here. The programs.direnv block further
     # down already installs it; listing it again is a second, redundant path to
     # the same package.
