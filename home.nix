@@ -77,6 +77,11 @@ in
   # PATH. So the Nix copy still wins for anything home.nix declares, and
   # ~/.local/bin only answers for what Nix does not manage. Reversing that
   # order is exactly the drift scripts/check-drift.sh reports.
+  #
+  # That only holds because programs.zsh.profileExtra below re-prepends the Nix
+  # profile explicitly. Relying on .zprofile's `. nix.sh` alone is not enough:
+  # it self-guards and no-ops when a login bash already sourced it, which is
+  # what happens on every machine where chsh fails. See the comment there.
   home.sessionPath = [ "$HOME/.local/bin" ];
 
   programs.zsh = {
@@ -107,6 +112,24 @@ in
       elif [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
         . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
       fi
+
+      # nix-daemon.sh guards itself with __ETC_PROFILE_NIX_SOURCED and returns
+      # immediately if that is already set. So the block above is a no-op in
+      # exactly one situation: chsh failed, bootstrap.sh installed the
+      # ~/.bashrc fallback, and a login bash sourced Nix and then `exec zsh -l`.
+      # The guard is exported, so zsh inherits it.
+      #
+      # By that point ~/.zshenv has already run and prepended ~/.local/bin from
+      # home.sessionPath. With nothing putting the Nix profile back in front,
+      # ~/.local/bin ends up first and shadows every tool this config declares.
+      # That is precisely the inversion scripts/check-drift.sh reports.
+      #
+      # Found on a clean WSL instance where chsh failed. It cannot be
+      # reproduced on a machine where zsh is already the login shell, because
+      # there no bash ever sources Nix first - the same blind spot as the
+      # profileExtra bug above it.
+      typeset -U path
+      path=( "$HOME/.nix-profile/bin" /nix/var/nix/profiles/default/bin $path )
     '';
 
     initContent = ''
