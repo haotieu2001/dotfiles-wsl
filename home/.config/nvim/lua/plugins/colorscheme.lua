@@ -10,11 +10,13 @@ return {
         dim_inactive_windows = false,
         extend_background_behind_borders = false,
         styles = {
-          -- Let the terminal's own background show through, so WezTerm's
-          -- window_background_opacity / Acrylic backdrop is visible behind
-          -- the editor instead of nvim painting an opaque rectangle over it.
-          -- On WSL, uname().release looks like "6.18.x-microsoft-standard-WSL2".
           italic = false,
+          -- Let the terminal's own background show through instead of nvim
+          -- painting an opaque rectangle over it. Windows Terminal is the
+          -- thing being seen through here: windows/profile-defaults.json sets
+          -- opacity 80 and a background image, and both disappear behind an
+          -- opaque editor.
+          -- On WSL, uname().release looks like "6.18.x-microsoft-standard-WSL2".
           transparency = string.find(vim.uv.os_uname().release, 'WSL') ~= nil,
         },
       })
