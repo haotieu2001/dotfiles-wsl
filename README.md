@@ -20,12 +20,12 @@ had before.
 
 <p align="center">
   <img src="docs/assets/screenshot.png" width="900"
-       alt="Windows Terminal after setup. herdr runs down the left with its spaces and agents panels; a Claude Code session fills the main pane. The blackpanther colour scheme and its background image show through the terminal's opacity, drawn in Hack Nerd Font.">
+       alt="Windows Terminal after setup, running herdr. The main pane shows tree output of this repo: bootstrap.sh, rebuild.sh, home.nix, the scripts and templates directories. herdr's spaces and agents panels run down the left. The blackpanther colour scheme and its background image show through the terminal's opacity, drawn in Hack Nerd Font.">
 </p>
 
 <p align="center"><sub>
-After <code>./bootstrap.sh</code>: herdr holding a session, the blackpanther
-scheme showing through, in Hack Nerd Font.
+After <code>./bootstrap.sh</code>: the repo itself, listed inside herdr, with the
+blackpanther scheme showing through in Hack Nerd Font.
 </sub></p>
 
 ## Contents
