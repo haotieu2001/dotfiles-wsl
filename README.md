@@ -101,6 +101,15 @@ That is the whole install. You do not need to run anything on the Windows side.
 > open Ubuntu again and run `./bootstrap.sh` again. Turning on systemd needs a
 > restart.
 
+**Already like your terminal?** Step 8 replaces your colours, font, opacity and
+background **once**. Your own colour schemes are kept, so you can switch straight
+back in Windows Terminal's Settings screen, and the old `settings.json` is backed
+up next to itself. To skip it entirely and keep the font only:
+
+```bash
+DOTFILES_SKIP_THEME=1 ./bootstrap.sh
+```
+
 The first build downloads a lot of files. This is normal and happens only once.
 
 When it finishes, close and reopen Windows Terminal. If you see boxes instead of
@@ -251,6 +260,14 @@ Terminal's own Settings screen. This repo sets the colours once when you install
 and never writes that file again. If you want to save new colours for future
 computers, edit the files in `windows/` and run
 `./scripts/apply-windows-terminal-theme.sh --force`.
+
+**Ship your own theme instead of mine.** Replace `windows/blackpanther.json`
+with your scheme, `windows/blackpanther.jpg` with your background, and point
+`SCHEME_FILE` and `IMAGE_FILE` at the top of
+`scripts/apply-windows-terminal-theme.sh` at them. The scheme's `name` must
+match `colorScheme` in `windows/profile-defaults.json`; the script refuses to
+run if they disagree, because Windows Terminal would otherwise silently ignore
+a scheme it cannot resolve.
 
 **Add a Neovim plugin.** Put a file in `home/.config/nvim/lua/plugins/`.
 lazy.nvim loads every file in that folder. No rebuild needed.

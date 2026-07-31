@@ -160,8 +160,18 @@ echo "==> Step 8: seed the Windows Terminal theme"
 # nothing away from you; reasserting the theme on every rebuild would fight
 # Windows Terminal's own Settings UI for ownership of settings.json. The script
 # is a no-op if the scheme is already there, so your terminal stays yours.
-"$DIR/scripts/apply-windows-terminal-theme.sh" || \
-  echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
+#
+# It is still a one-time overwrite of colours, font and opacity, which someone
+# cloning this repo with a terminal they already like will not want. There was
+# no way to decline it short of interrupting the install, so:
+if [ -n "${DOTFILES_SKIP_THEME:-}" ]; then
+  echo "    DOTFILES_SKIP_THEME is set, leaving Windows Terminal alone."
+  echo "    Only the font was installed. Apply the theme later if you change"
+  echo "    your mind: ./scripts/apply-windows-terminal-theme.sh"
+else
+  "$DIR/scripts/apply-windows-terminal-theme.sh" || \
+    echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
+fi
 
 cat <<'NEXT'
 
@@ -170,10 +180,24 @@ cat <<'NEXT'
 Restart Windows Terminal to pick up the font and colour scheme. If glyphs
 still look wrong afterwards, sign out of Windows and back in once so the
 newly registered font is enumerated.
+NEXT
+
+if [ -n "${DOTFILES_SKIP_THEME:-}" ]; then
+  cat <<'NEXT'
+
+Your terminal colours were left exactly as they were.
+NEXT
+else
+  cat <<'NEXT'
 
 The theme was seeded once, just now. From here it is yours: change colours,
 opacity and padding in Windows Terminal's own Settings UI and nothing in
-this repo will overwrite them.
+this repo will overwrite them. The previous settings.json was backed up
+next to itself as settings.json.pre-dotfiles-wsl.*
+NEXT
+fi
+
+cat <<'NEXT'
 
 If you were already in a shell, start a new one so zsh and the Nix
 profile are picked up.
