@@ -6,6 +6,9 @@ let
   # herdr is not in nixpkgs, so we package the upstream static binary
   # ourselves, pinned by version + hash. See modules/herdr.nix.
   herdr = pkgs.callPackage ./modules/herdr.nix { };
+
+  # CPU/RAM readout pinned to the terminal's top row. See modules/statusbar.nix.
+  statusbar = pkgs.callPackage ./modules/statusbar.nix { };
 in
 
 {
@@ -29,7 +32,8 @@ in
     git
     gh        # github cli: PRs, releases, and the thing that holds the API token
     tree
-    herdr     # agent multiplexer
+    herdr       # agent multiplexer
+    statusbar   # CPU/RAM readout pinned to the terminal's top row
 
     # Language toolchains that used to be installed by hand: node came from
     # nvm, uv from a curl'd binary in ~/.local/bin. Neither survived a new
@@ -158,6 +162,24 @@ in
       winhome() {
         cd "$(wslpath "$(cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d "\r")")"
       }
+
+      # Pin CPU/RAM to the terminal's top row. See modules/statusbar.nix for
+      # why this is a raw scroll-region trick rather than a tmux status line:
+      # this repo doesn't manage tmux, and herdr, the multiplexer actually in
+      # use, has no status-bar concept of its own.
+      #
+      # STATUSBAR_PID is exported, so a nested shell (a script, or `zsh` run
+      # by hand) inherits it and skips relaunching rather than stacking a
+      # second bar on the same terminal. `disown` only silences the "you have
+      # running jobs" warning on exit - it does not stop the terminal from
+      # sending SIGHUP when the pty itself closes, which is what actually
+      # triggers the trap in modules/statusbar.nix that restores the
+      # scroll region.
+      if [[ -o interactive ]] && [[ -t 1 ]] && [[ -z "''${STATUSBAR_PID:-}" ]]; then
+        statusbar &
+        export STATUSBAR_PID=$!
+        disown
+      fi
     '';
     shellAliases = {
       ".." = "cd ..";
