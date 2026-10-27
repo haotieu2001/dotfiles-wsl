@@ -2,8 +2,8 @@
 # Seed Windows Terminal with this repo's colour scheme, font and background,
 # from inside WSL. No PowerShell step, no admin rights.
 #
-# THIS RUNS ONCE, FROM bootstrap.sh. It is deliberately NOT called by
-# rebuild.sh.
+# THIS SEEDS ONCE, FROM bootstrap.sh. Re-runs (including the one inside
+# update.sh) are no-ops while the scheme is already there.
 #
 # The distinction matters and is the whole design of this script. Windows
 # Terminal's settings.json is a file Windows Terminal itself writes every time
@@ -24,9 +24,7 @@
 # Safe to run by hand. Backs up settings.json before its single write.
 set -euo pipefail
 
-# jq comes from the home-manager profile. bootstrap.sh calls this from a shell
-# that started before the first switch, so the profile is not on PATH yet.
-export PATH="$HOME/.nix-profile/bin:$PATH"
+command -v jq >/dev/null || { echo "    ! jq not found; run ./bootstrap.sh first" >&2; exit 1; }
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 FORCE=0

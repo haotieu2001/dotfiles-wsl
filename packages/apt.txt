@@ -1,0 +1,35 @@
+# Installed by bootstrap.sh with `apt-get install`. One package per line; # starts a comment.
+# gh, terraform and nodejs come from their vendors' apt repos (set up in bootstrap.sh step 1),
+# because Ubuntu's own copies are too old (gh 2.46) or a major behind (Node 22).
+
+# shell
+zsh
+zsh-autosuggestions
+zsh-syntax-highlighting
+starship
+direnv
+
+# command line tools
+git
+gh
+ripgrep
+fd-find
+fzf
+jq
+lazygit
+tree
+neovim
+make
+postgresql-client
+
+# language toolchains and infra
+nodejs
+terraform
+
+# what the installers below need
+curl
+ca-certificates
+gnupg
+unzip
+xz-utils
+fontconfig

@@ -3,11 +3,11 @@
 What every file does, and which one to open when you want to change something.
 
 This is deliberately short. It covers what is specific to *this repo*. For how
-Nix, home-manager, lazy.nvim or direnv work in general, search for them when you
-need to; that knowledge is not repo-specific and goes stale here.
+apt, uv, lazy.nvim or direnv work in general, search for them when you need to;
+that knowledge is not repo-specific and goes stale here.
 
 - [When you want to change something](#when-you-want-to-change-something)
-- [Build files](#build-files)
+- [Install files](#install-files)
 - [Scripts](#scripts)
 - [Linked config](#linked-config)
 - [The terminal](#the-terminal)
@@ -19,10 +19,13 @@ need to; that knowledge is not repo-specific and goes stale here.
 
 | You want to | Open | Then |
 | --- | --- | --- |
-| Add or remove a command line tool | `home.nix`, `home.packages` | `./rebuild.sh` |
-| Add a shell alias or shortcut | `home.nix`, `programs.zsh` | `./rebuild.sh` |
-| Change the prompt | `home.nix`, `programs.starship` | `./rebuild.sh` |
-| Move to a newer nixpkgs | `nix flake update` | `./rebuild.sh` |
+| Add or remove an apt package | `packages/apt.txt` | `./bootstrap.sh` |
+| Add a tool apt does not have | `packages/pinned.sh` + step 3 of `bootstrap.sh` | `./bootstrap.sh` |
+| Upgrade herdr, lua-language-server or the font | version + SHA-256 in `packages/pinned.sh` | `./bootstrap.sh` |
+| Upgrade everything else | - | `./update.sh` |
+| Add a shell alias or shortcut | `home/.zshrc` | open a new shell |
+| Change an environment variable or PATH | `home/.zshenv` | open a new shell |
+| Change the prompt | `home/.config/starship.toml` | nothing, it is linked |
 | Change a Neovim setting | `home/.config/nvim/lua/vim_config.lua` | nothing, it is linked |
 | Add a Neovim plugin | new file in `home/.config/nvim/lua/plugins/` | nothing |
 | Change a Neovim key | `home/.config/nvim/lua/keys.lua` | nothing |
@@ -30,45 +33,47 @@ need to; that knowledge is not repo-specific and goes stale here.
 | Change how AI tools behave | `home/AGENTS.md` | nothing |
 | Change terminal colours **now** | Windows Terminal's own Settings | nothing |
 | Save terminal colours for the **next** machine | `windows/*.json` | `./scripts/apply-windows-terminal-theme.sh --force` |
-| Give one project its own toolchain | that project, not this repo | see [Per-project tools](#per-project-tools) |
-| Find what is installed outside Nix | - | `./scripts/check-drift.sh` |
+| Give one project its own Python | that project, with uv | see [Per-project tools](#per-project-tools) |
+| Check this machine matches the repo | - | `./scripts/check-drift.sh` |
 
 The rule behind the "then" column: **anything under `home/` is symlinked into
-place, so edits work immediately.** Everything else is built by Nix and needs
-`./rebuild.sh`.
+place, so edits work immediately.** Packages are installed by `bootstrap.sh`, so
+a package change means running it again.
 
-## Build files
+## Install files
 
 | File | What it does |
 | --- | --- |
-| `flake.nix` | The entry point. Pins nixpkgs and home-manager, sets `user = `, and exposes `homeConfigurations."wsl"` plus the two project templates. |
-| `flake.lock` | The exact commit of every input. This file is what makes a new machine identical rather than merely similar. Commit it. |
-| `home.nix` | The whole user environment: package list, zsh, Starship, direnv, and the symlinks into `home/`. The file you edit most. |
-| `modules/herdr.nix` | Packages herdr, which is not in nixpkgs, from its upstream release binary pinned by version and hash. Copy this file as a pattern when you need another tool that nixpkgs does not carry. |
+| `packages/apt.txt` | Every apt package, one per line. `gh`, `terraform` and `nodejs` resolve to their vendors' repos, which `bootstrap.sh` adds in step 1. |
+| `packages/pinned.sh` | Downloads that are not in apt: herdr, lua-language-server and Hack Nerd Font, each with a version, URL and SHA-256. Also the npm and uv global tool lists. |
 
-`user = ` in `flake.nix` must match your Linux username. `bootstrap.sh` step 4
-offers to set it for you.
+To get a new digest for a GitHub release asset:
+
+```bash
+gh api repos/OWNER/REPO/releases/tags/TAG --jq '.assets[] | .name + " " + .digest'
+```
 
 ## Scripts
 
 | Script | When it runs | What it does |
 | --- | --- | --- |
-| `bootstrap.sh` | once, on a new machine | Steps 0-8: checks WSL, turns on systemd, installs Determinate Nix, links `~/.dotfiles`, sets your username, first build, makes zsh your login shell, installs the font, seeds terminal colours. |
-| `rebuild.sh` | every time you change a build file | `home-manager switch`, then pushes the font to Windows. Safe to run repeatedly. |
-| `scripts/install-windows-font.sh` | from `bootstrap.sh` and every `rebuild.sh` | Copies Hack Nerd Font from the Nix store into the Windows font folder, so the font version is pinned by `flake.lock` like everything else. |
-| `scripts/apply-windows-terminal-theme.sh` | from `bootstrap.sh` **only**, once | Merges `windows/*.json` into Windows Terminal's `settings.json`. Backs the file up first, and refuses to overwrite a scheme that is already there unless you pass `--force`. Skip it at install time with `DOTFILES_SKIP_THEME=1 ./bootstrap.sh`. |
-| `scripts/check-drift.sh` | whenever you want | Reports software installed outside Nix, and tools where a non-Nix copy is winning on `PATH`. Read-only. Exit 1 means real drift. |
-
-`bootstrap.sh` is safe to re-run. If step 1 asks you to run `wsl --shutdown`, do
-that from PowerShell and run it again.
+| `bootstrap.sh` | once on a new machine, and after any change in `packages/` | Steps 0-8: checks WSL, apt (with vendor repos), Databricks CLI and uv, language servers and pinned downloads, links, cleans up old Nix lines, login shell, font, terminal colours. Every step checks before acting, so re-running is safe. |
+| `update.sh` | whenever you want newer versions | `apt upgrade`, re-installs the Databricks CLI, `uv self update`, `uv tool upgrade --all`, `npm update -g`, then re-runs `bootstrap.sh` quietly. |
+| `scripts/link.sh` | from `bootstrap.sh` step 4 | Links each file under `home/` into `$HOME` through `~/.dotfiles`. Backs up a real file before replacing it, and removes old home-manager links into `/nix/store`. |
+| `scripts/install-windows-font.sh` | from `bootstrap.sh` | Copies Hack Nerd Font from `~/.local/share/fonts/HackNerdFont` into the Windows per-user font folder and registers it. |
+| `scripts/apply-windows-terminal-theme.sh` | from `bootstrap.sh`, seeds once | Merges `windows/*.json` into Windows Terminal's `settings.json`. Backs the file up first, and refuses to overwrite a scheme that is already there unless you pass `--force`. Skip it with `DOTFILES_SKIP_THEME=1 ./bootstrap.sh`. |
+| `scripts/check-drift.sh` | whenever you want | Checks every declared tool is installed and comes from where it should, lists anything undeclared in `~/.local/bin`, and reports Nix leftovers. Read-only. Exit 1 means something needs fixing. |
 
 ## Linked config
 
-Everything under `home/` is symlinked into your home folder by `home.nix`, so
-the file in this repo *is* the file the program reads. Edit and it takes effect.
+Everything under `home/` is symlinked into your home folder by `scripts/link.sh`,
+so the file in this repo *is* the file the program reads. Edit and it takes effect.
 
 | File | What it does |
 | --- | --- |
+| `home/.zshenv` | Read by every zsh: `EDITOR`, `~/.local/bin` at the front of `PATH`, rustup's env file. |
+| `home/.zshrc` | Interactive zsh: completion, history, the apt zsh plugins, `winhome` and `open`, starship, direnv, aliases. |
+| `home/.config/starship.toml` | The prompt. |
 | `home/AGENTS.md` | Shared instructions read by Claude Code, Codex and opencode. Linked to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`. |
 | `home/.config/herdr/config.toml` | herdr keybindings. Prefix is `ctrl+b`, then `c` new tab, `%` and `"` split, `hjkl` move between panes, `w` workspace picker, `y` copy mode. |
 | `home/.config/nvim/init.lua` | Loads the three modules below, in order. |
@@ -76,7 +81,7 @@ the file in this repo *is* the file the program reads. Edit and it takes effect.
 | `home/.config/nvim/lua/plugin.lua` | Bootstraps lazy.nvim and tells it to load every file in `plugins/`. |
 | `home/.config/nvim/lua/keys.lua` | Key bindings. `Esc` saves, `ctrl+a` selects all, and `p` over a selection keeps your clipboard. |
 | `home/.config/nvim/lua/plugins/*.lua` | One file per group of plugins: `colorscheme`, `git`, `lsp`, `navigation`, `ui`. Drop in a new file to add a plugin. |
-| `home/.config/nvim/lua/plugins/lsp.lua` | Enables the language servers declared in `home.nix`. No `setup()` calls: Neovim 0.11+ reads nvim-lspconfig's per-server config itself via `vim.lsp.enable`. |
+| `home/.config/nvim/lua/plugins/lsp.lua` | Enables the language servers `bootstrap.sh` installs. No `setup()` calls: Neovim 0.11+ reads nvim-lspconfig's per-server config itself via `vim.lsp.enable`. |
 
 The clipboard bridge in `vim_config.lua` is the one part worth knowing about.
 `clipboard = 'unnamedplus'` works on macOS because Neovim finds `pbcopy`. A WSL
@@ -93,12 +98,12 @@ in `^M`.
 | `windows/profile-defaults.json` | Font, size, opacity, padding, cursor, and the background image reference. |
 | `windows/blackpanther.jpg` | The background image. |
 
-These are applied **once**, by `bootstrap.sh` step 8. `rebuild.sh` never writes
-Windows Terminal's settings.
+These are applied **once**, by `bootstrap.sh` step 8. Later runs, including the
+one inside `update.sh`, find the scheme already there and change nothing.
 
 That is on purpose. `settings.json` is a file you also edit through Windows
 Terminal's own Settings screen, and every value in it is taste. A repo that
-rewrote it on every rebuild would fight you for control of your own terminal.
+rewrote it on every run would fight you for control of your own terminal.
 Seeding it once gives a new machine your look without ever undoing a change you
 made yourself.
 
@@ -130,61 +135,64 @@ Nerd Font works.
 
 ## Per-project tools
 
-`home.nix` installs what you want on every machine. A version of Python or Node
-that only one project needs belongs in that project:
+This repo installs what you want on every machine. A Python version or package
+set that only one project needs belongs in that project, managed by uv:
 
 ```bash
 cd ~/my-api
-nix flake init -t ~/.dotfiles#python    # or #node
-direnv allow
+uv init --python 3.12     # pyproject.toml + .python-version
+uv add ruff --dev         # dependencies pinned in uv.lock
+uv run pytest             # runs with that project's Python and .venv
 ```
 
-Now the tools appear when you walk into the folder and disappear when you leave.
-The versions live in that project's own `flake.lock`, so they travel with the
-code instead of living on one laptop. This is what replaces nvm, pyenv, conda
-and `pip install --user`.
+uv downloads the Python version the project asks for, so nothing extra is
+installed globally. `.python-version`, `pyproject.toml` and `uv.lock` are
+committed with the code; `uv sync` recreates the environment on another laptop.
 
-| File | What it does |
-| --- | --- |
-| `templates/python/flake.nix` | Python 3.12, uv and ruff. Nix pins the interpreter, uv pins the packages in `uv.lock`. |
-| `templates/node/flake.nix` | Node 24 and pnpm. |
-| `templates/*/.envrc` | One line, `use flake`. This is what direnv reads. |
+Node has no per-project version switching here: every project gets the global
+Node 24. The Nix templates (`templates/python`, `templates/node`) that used to
+provide per-project toolchains were removed with Nix.
 
-Each template pins nixpkgs independently of this repo, so updating your dotfiles
-does not move a project's toolchain, and vice versa.
+direnv is still installed and hooked into zsh, for per-project environment
+variables: an `.envrc` with `dotenv` or `source .venv/bin/activate`, then
+`direnv allow`.
 
 ## Decisions that will surprise you
 
 Short list of things that look like bugs and are not.
 
 **`~/.dotfiles` is a symlink, and every link goes through it.** That is why you
-can move or rename the repo folder and nothing breaks. Both scripts recreate it.
+can move or rename the repo folder and nothing breaks: re-run `./bootstrap.sh`
+and it points `~/.dotfiles` at the new place.
 
-**`stateVersion` is not a version to keep current.** It locks in defaults that
-home-manager might change later. Set once, then never touch it.
+**`~/.local/bin` comes first on `PATH`.** It holds what this repo installs
+outside apt (uv, herdr, the language servers) plus self-updating tools (Claude
+Code, the AWS CLI). Putting it first means a newer copy there beats an older apt
+one. `check-drift.sh` reports anything in it the repo does not declare.
 
-**Claude Code is deliberately not installed by Nix.** It updates itself, and the
-Nix store is read-only. Pinning it would freeze it and shadow the newer copy.
-It lives in `~/.local/bin` on purpose.
+**Most versions are not locked.** apt and the vendor repos give you whatever is
+current the day you install. That is the trade made by leaving Nix. Only the
+three GitHub downloads in `packages/pinned.sh` are byte-for-byte identical on
+every machine. Run `./update.sh` on both laptops to bring them level.
+
+**Claude Code is deliberately not installed here.** It updates itself into
+`~/.local/bin`; managing it from this repo would fight that.
 
 **`~/.claude` is deliberately not managed.** Claude Code edits its own
-`settings.json`, so home-manager replacing it with a store symlink would
-silently displace whatever was there. Only symlink files this repo owns
-outright.
+`settings.json`, so replacing it with a symlink would silently displace whatever
+was there. Only link files this repo owns outright.
 
 **Language servers are not installed by mason.** mason downloads binaries into
-`~/.local/share/nvim`, which are unpinned, absent on a new machine, and exactly
-the drift `check-drift.sh` reports. They are in `home.packages` instead, so a
-server is as reproducible as `ripgrep`. A server that is enabled in `lsp.lua`
-but not installed is silently skipped, so the two lists can drift apart without
-breaking anything.
+`~/.local/share/nvim`, which are absent on a new machine and invisible to this
+repo. `bootstrap.sh` installs them instead, and `check-drift.sh` checks they are
+there. A server that is enabled in `lsp.lua` but not installed is silently
+skipped.
 
-**`direnv` is not in `home.packages`.** The `programs.direnv` block installs it
-*and* wires it into zsh. Listing it in both places is a redundant second path to
-the same package.
+**`fd` is a link to `fdfind`.** Debian renamed the binary to avoid a clash with
+another package; `bootstrap.sh` links `~/.local/bin/fd` so the usual name works.
 
-**`git` is in `home.packages` even though you need git to clone this repo.** The
-first git comes from apt; this one is pinned and wins once you have installed.
+**`lua-language-server` in `~/.local/bin` is a two-line wrapper, not a link.** The
+server finds its runtime files relative to the path it was started from.
 
 **Neovim plugins are not pinned.** lazy.nvim manages them, and
 `lazy-lock.json` is gitignored. Delete that line from `.gitignore` if you want
@@ -204,21 +212,12 @@ it could deliver.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `bootstrap.sh` says to run `wsl --shutdown` | Normal. systemd needs a restart. Run it in PowerShell, reopen Ubuntu, run `./bootstrap.sh` again. |
-| `nix: command not found` after installing | Nix is only added to *new* shells. Open one, or `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`. |
-| `Could not resolve host` during the first build | Almost always temporary; WSL's network is briefly unavailable while Nix and systemd start. Run `./bootstrap.sh` again, it resumes. |
-| `Existing file ... would be clobbered` | You ran home-manager without `-b backup`. Use `./rebuild.sh`. |
-| Still in bash after installing | `chsh` failed, which is common under WSL. Check with `getent passwd "$USER" \| cut -d: -f7`. |
+| `bootstrap.sh` stops at a `sudo` prompt | Normal: apt needs your Linux password. |
+| `chsh: PAM: Authentication failure` | `chsh` wants your Linux password, and fails under some WSL setups. `bootstrap.sh` then launches zsh from `~/.bashrc` instead, which works the same. |
+| Still in bash after installing | Open a **new** terminal. Check with `getent passwd "$USER" \| cut -d: -f7`. |
 | Prompt shows boxes instead of icons | Windows has not picked up the font. Run `./scripts/install-windows-font.sh`, then sign out of Windows and back in. |
-| A tool is a different version from `home.nix` | Something non-Nix is earlier on `PATH`. Run `./scripts/check-drift.sh`. |
-| Added a package, command not found | Profile is stale. `./rebuild.sh`, then open a new shell. |
-| Edited `home/` and nothing changed | Those are linked, so it should be instant. If not, the `~/.dotfiles` link is wrong: `cd` to the repo and run `./rebuild.sh`. |
-| Every build is slow | The repo is on the Windows disk. `pwd -P` must start with `/home`, not `/mnt`. |
-| A rebuild made things worse | `home-manager generations`, then run the `activate` script of an older one. |
-
-Full uninstall:
-
-```bash
-nix run home-manager/release-26.05 -- uninstall
-/nix/nix-installer uninstall
-```
+| `checksum mismatch` during step 3 | The download changed or was cut short. Re-run; if it persists, the release asset was replaced and the digest in `packages/pinned.sh` needs checking. |
+| A tool is a different version than expected | Something earlier on `PATH` is winning. Run `./scripts/check-drift.sh`. |
+| Added a package, command not found | Re-run `./bootstrap.sh`, then open a new shell. |
+| Edited `home/` and nothing changed | Those are linked, so it should be instant (zsh: new shell). If not, the `~/.dotfiles` link is wrong: run `./bootstrap.sh` from the repo. |
+| Everything is slow | The repo is on the Windows disk. `pwd -P` must start with `/home`, not `/mnt`. |
