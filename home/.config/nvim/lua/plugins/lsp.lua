@@ -1,9 +1,10 @@
--- The servers themselves come from home.packages, not from mason.
+-- The servers themselves are installed by bootstrap.sh, not by mason.
 --
--- mason downloads its own binaries into ~/.local/share/nvim: unpinned, absent
--- on the next machine, and invisible to flake.lock. That is precisely the drift
--- scripts/check-drift.sh exists to report. Declaring them in home.nix keeps a
--- language server as reproducible as ripgrep.
+-- mason downloads its own binaries into ~/.local/share/nvim: absent on the next
+-- machine and invisible to the repo. Installing them in bootstrap.sh (npm and uv
+-- globals, plus lua-language-server pinned in packages/pinned.sh) keeps a
+-- language server as reproducible as ripgrep, and scripts/check-drift.sh checks
+-- they are there.
 --
 -- nvim-lspconfig is still wanted, but only for the per-server *config* - the
 -- command to run, which filetypes it claims, which files mark a project root.
@@ -11,7 +12,7 @@
 -- setup() call and no on_attach boilerplate here.
 --
 -- A server that is enabled but not installed is silently skipped, so trimming
--- the package list in home.nix degrades gracefully.
+-- the install list in bootstrap.sh degrades gracefully.
 return {
   {
     'neovim/nvim-lspconfig',
@@ -31,7 +32,6 @@ return {
 
       vim.lsp.enable({
         'lua_ls',       -- this config
-        'nil_ls',       -- home.nix, flake.nix
         'basedpyright', -- python
         'ts_ls',        -- javascript, typescript
         'bashls',       -- bootstrap.sh and the scripts/

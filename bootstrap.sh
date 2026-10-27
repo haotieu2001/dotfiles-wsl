@@ -1,173 +1,177 @@
 #!/usr/bin/env bash
-# Takes a fresh WSL Ubuntu from nothing to a built home-manager config.
-# Run this once. After it finishes, use ./rebuild.sh for every later change.
+# Takes a fresh WSL Ubuntu to the full setup: apt packages, vendor CLIs, pinned
+# downloads, linked config, zsh as the login shell, the font and terminal theme
+# on the Windows side.
 #
-# This is the WSL counterpart of the macOS bootstrap.sh. The big difference:
-# there is no nix-darwin and no sudo darwin-rebuild, because WSL Ubuntu is not
-# NixOS. home-manager runs standalone and owns only $HOME.
+# Safe to re-run at any time: every step checks before it acts. Re-running is
+# also how a new entry in packages/ gets installed.
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=packages/pinned.sh
+. "$DIR/packages/pinned.sh"
+BIN="$HOME/.local/bin"
+OPT="$HOME/.local/opt"
+mkdir -p "$BIN" "$OPT"
+
+# Download $1 to $3 and refuse to continue unless its SHA-256 is $2.
+fetch() {
+  curl -fsSL --retry 3 -o "$3" "$1"
+  echo "$2  $3" | sha256sum -c --quiet - || { echo "    checksum mismatch for $1" >&2; exit 1; }
+}
 
 echo "==> Step 0: confirm we are inside WSL"
 if ! grep -qi microsoft /proc/version 2>/dev/null; then
-  echo "    This does not look like WSL. On a normal Linux box the rest still"
-  echo "    works, but the Windows-side steps at the end will not apply."
+  echo "    This does not look like WSL. Linux steps still work; the Windows ones (7, 8) will not."
 fi
 
-echo "==> Step 1: systemd"
-# The Determinate installer manages the Nix daemon through systemd. Older WSL
-# images boot without an init system, and Nix multi-user mode then has nothing
-# to start the daemon with.
-if [ -d /run/systemd/system ]; then
-  echo "    systemd is running, good"
+echo "==> Step 1: apt packages (needs sudo)"
+# shellcheck source=/dev/null
+. /etc/os-release
+sudo apt-get update -qq
+sudo apt-get install -y -qq curl ca-certificates gnupg
+sudo install -d -m 755 /etc/apt/keyrings
+
+# Vendor repos for the three packages Ubuntu ships too old or not at all.
+# Their versions are higher than Ubuntu's, so apt prefers them without pinning.
+if [ ! -f /etc/apt/sources.list.d/github-cli.list ]; then
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+  sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+fi
+if [ ! -f /etc/apt/sources.list.d/hashicorp.list ]; then
+  curl -fsSL https://apt.releases.hashicorp.com/gpg \
+    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/hashicorp-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com ${VERSION_CODENAME} main" \
+    | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+fi
+if [ ! -f /etc/apt/sources.list.d/nodesource.list ]; then
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
+    | sudo tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+fi
+
+mapfile -t APT_PACKAGES < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$DIR/packages/apt.txt")
+sudo apt-get update -qq
+sudo apt-get install -y -qq "${APT_PACKAGES[@]}"
+
+echo "==> Step 2: vendor CLIs"
+# Databricks CLI: the official installer puts it in /usr/local/bin and exits
+# if a copy is already there, so only run it when missing. update.sh upgrades.
+if [ -x /usr/local/bin/databricks ]; then
+  echo "    databricks already installed ($(/usr/local/bin/databricks --version))"
 else
-  echo "    systemd is NOT running in this distro."
-  if ! grep -q 'systemd *= *true' /etc/wsl.conf 2>/dev/null; then
-    echo "    Enabling it in /etc/wsl.conf (needs sudo)..."
-    sudo tee -a /etc/wsl.conf >/dev/null <<'WSLCONF'
-
-[boot]
-systemd=true
-WSLCONF
-  fi
-  echo ""
-  echo "    Now restart WSL from a Windows PowerShell window:"
-  echo "        wsl --shutdown"
-  echo "    then reopen this distro and re-run ./bootstrap.sh"
-  exit 1
+  curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sudo sh
 fi
-
-echo "==> Step 2: Determinate Nix"
-if command -v nix >/dev/null 2>&1; then
-  echo "    nix already installed, skipping"
+# uv: the official installer, told not to edit shell files (home/.zshenv puts
+# ~/.local/bin on PATH already).
+if [ -x "$BIN/uv" ]; then
+  echo "    uv already installed ($("$BIN/uv" --version))"
 else
-  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
-    | sh -s -- install --no-confirm
-  # shellcheck disable=SC1091
-  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
 fi
 
-echo "==> Step 3: symlink this repo to ~/.dotfiles"
-# home.nix resolves its mkOutOfStoreSymlink paths through ~/.dotfiles, so this
-# has to exist before the first switch or the build will fail to find them.
-ln -sfn "$DIR" ~/.dotfiles
-
-echo "==> Step 4: personalize the configured username"
-REAL_USER="$(whoami)"
-FLAKE_USER="$(sed -nE 's/^[[:space:]]*user = "([^"]+)";.*/\1/p' "$DIR/flake.nix" | head -n1)"
-if [ -z "$FLAKE_USER" ]; then
-  echo "    Could not find the single \"user = \" line in flake.nix."
-  echo "    Edit flake.nix yourself before continuing."
-  exit 1
-elif [ "$FLAKE_USER" != "$REAL_USER" ]; then
-  echo "    flake.nix is configured for user \"$FLAKE_USER\", but you are \"$REAL_USER\"."
-  read -r -p "    Rewrite flake.nix's \"user = \" line to \"$REAL_USER\"? [y/N] " REPLY
-  if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-    # GNU sed: -i takes no argument, unlike the BSD sed the macOS script uses.
-    sed -i -E "s/^([[:space:]]*user = \")[^\"]+(\";.*)/\1${REAL_USER}\2/" "$DIR/flake.nix"
-    echo "    Updated. Review the change with: git diff flake.nix"
-  else
-    echo "    Skipped. Edit the single \"user = \" line in flake.nix yourself before continuing."
-    exit 1
-  fi
-else
-  echo "    flake.nix already matches \"$REAL_USER\", nothing to do."
-fi
-
-echo "==> Step 5: first home-manager switch"
-# home-manager isn't on PATH yet on a fresh machine, so run it straight from
-# the flake this once. After this, rebuild.sh works normally.
-# -b backup renames any file we are about to take over (~/.bashrc, ~/.profile)
-# to <name>.backup instead of aborting the whole activation.
-NIX_BIN="$(command -v nix)"
-
-# Retry on transient failure. WSL routes DNS through a proxy on the host
-# (usually 10.255.255.254), and it is briefly unreachable while the Nix daemon
-# and systemd units settle after Step 2. Fixed-output derivations download
-# inside the build sandbox, so they fail with "Could not resolve host" during
-# that window even though the flake inputs fetched fine moments earlier.
-# Nothing is misconfigured; it just needs another go.
-for attempt in 1 2 3; do
-  if "$NIX_BIN" run home-manager/release-26.05 -- \
-      switch --flake ~/.dotfiles#wsl -b backup; then
-    break
-  fi
-  if [ "$attempt" -eq 3 ]; then
-    echo ""
-    echo "    Switch failed three times."
-    echo "    If the errors said 'Could not resolve host', check DNS:"
-    echo "        curl -sSI https://cache.nixos.org >/dev/null && echo 'DNS ok'"
-    echo "    Then re-run ./bootstrap.sh. Already-downloaded packages are cached,"
-    echo "    so the retry picks up where this left off."
-    exit 1
-  fi
-  echo "    Attempt $attempt failed, retrying in $((attempt * 15))s (often transient DNS on WSL)..."
-  sleep "$((attempt * 15))"
+echo "==> Step 3: language servers and pinned downloads"
+# npm globals go to ~/.local, so they need no sudo and land in ~/.local/bin.
+npm config set prefix "$HOME/.local"
+# shellcheck disable=SC2086
+npm install -g --silent $NPM_GLOBALS
+for tool in $UV_TOOLS; do
+  "$BIN/uv" tool install --quiet "$tool" 2>/dev/null || "$BIN/uv" tool upgrade --quiet "$tool"
 done
-# If this fails with "nix: command not found", open a new shell so the Nix
-# profile is on PATH, then re-run ./bootstrap.sh.
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+if [ ! -x "$OPT/herdr-$HERDR_VERSION/herdr" ]; then
+  fetch "$HERDR_URL" "$HERDR_SHA256" "$TMP/herdr"
+  install -Dm755 "$TMP/herdr" "$OPT/herdr-$HERDR_VERSION/herdr"
+fi
+ln -sfn "$OPT/herdr-$HERDR_VERSION/herdr" "$BIN/herdr"
+echo "    herdr $HERDR_VERSION"
+
+if [ ! -x "$OPT/lua-language-server-$LUALS_VERSION/bin/lua-language-server" ]; then
+  fetch "$LUALS_URL" "$LUALS_SHA256" "$TMP/luals.tar.gz"
+  mkdir -p "$OPT/lua-language-server-$LUALS_VERSION"
+  tar -xzf "$TMP/luals.tar.gz" -C "$OPT/lua-language-server-$LUALS_VERSION"
+fi
+# A wrapper rather than a symlink: lua-language-server finds its runtime files
+# relative to the path it was started from.
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$OPT/lua-language-server-$LUALS_VERSION/bin/lua-language-server" > "$BIN/lua-language-server"
+chmod +x "$BIN/lua-language-server"
+echo "    lua-language-server $LUALS_VERSION"
+
+FONT_DIR="$HOME/.local/share/fonts/HackNerdFont"
+if [ "$(cat "$FONT_DIR/.version" 2>/dev/null)" != "$NERDFONT_VERSION" ]; then
+  fetch "$NERDFONT_URL" "$NERDFONT_SHA256" "$TMP/hack.tar.xz"
+  rm -rf "$FONT_DIR" && mkdir -p "$FONT_DIR"
+  tar -xJf "$TMP/hack.tar.xz" -C "$FONT_DIR" --wildcards '*.ttf'
+  echo "$NERDFONT_VERSION" > "$FONT_DIR/.version"
+  fc-cache -f "$FONT_DIR" >/dev/null
+fi
+echo "    Hack Nerd Font $NERDFONT_VERSION"
+
+# Debian calls fd's binary fdfind; give it its usual name.
+ln -sfn /usr/bin/fdfind "$BIN/fd"
+
+echo "==> Step 4: link config into \$HOME"
+# Every link goes through ~/.dotfiles, so the repo folder can move or be renamed.
+ln -sfn "$DIR" "$HOME/.dotfiles"
+"$DIR/scripts/link.sh"
+
+echo "==> Step 5: remove the old Nix lines from bash's startup files"
+# The Nix-based setup appended PATH blocks to ~/.profile and ~/.bashrc, and a
+# block that launches the Nix zsh. Each starts with a "# dotfiles-wsl:" marker.
+strip_block() {  # file, regex for the block's first line, regex for its last line
+  [ -f "$1" ] && grep -qE "$2" "$1" || return 0
+  cp -f "$1" "$1.pre-drop-nix"
+  awk -v s="$2" -v e="$3" '$0 ~ s {skip=1} !skip {print} skip && $0 ~ e {skip=0}' "$1.pre-drop-nix" > "$1"
+  echo "    cleaned ${1/#$HOME/~} (backup: ${1/#$HOME/~}.pre-drop-nix)"
+}
+strip_block "$HOME/.profile" '^# dotfiles-wsl: let Nix win the PATH' '^export PATH=.*nix-profile/bin'
+strip_block "$HOME/.bashrc"  '^# dotfiles-wsl: let Nix win the PATH' '^export PATH=.*nix-profile/bin'
+strip_block "$HOME/.bashrc"  '^# dotfiles-wsl: launch zsh'           '^fi$'
 
 echo "==> Step 6: make zsh the login shell"
-# Ubuntu logs you into bash. The zsh we want is the home-manager one, not an
-# apt one, so that the shell is pinned like everything else.
-ZSH_BIN="$HOME/.nix-profile/bin/zsh"
-if [ ! -x "$ZSH_BIN" ]; then
-  echo "    $ZSH_BIN not found, skipping. Re-run after a successful switch."
-elif [ "${SHELL:-}" = "$ZSH_BIN" ]; then
-  echo "    already the login shell, nothing to do"
+ZSH_BIN="/usr/bin/zsh"
+# The Nix setup registered its own zsh here; that path stops existing with Nix.
+if grep -q 'nix-profile' /etc/shells; then
+  sudo sed -i '\|nix-profile|d' /etc/shells
+  echo "    removed the Nix zsh from /etc/shells"
+fi
+if [ "$(getent passwd "$USER" | cut -d: -f7)" = "$ZSH_BIN" ]; then
+  echo "    already the login shell"
+elif chsh -s "$ZSH_BIN"; then
+  echo "    login shell is now $ZSH_BIN (applies to new terminals)"
 else
-  # chsh refuses any shell that is not listed in /etc/shells.
-  if ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
-    echo "    registering $ZSH_BIN in /etc/shells (needs sudo)"
-    echo "$ZSH_BIN" | sudo tee -a /etc/shells >/dev/null
-  fi
-  # chsh needs your UNIX password (not sudo) and fails under some WSL PAM
-  # setups. Fall back to launching zsh from ~/.bashrc, which needs no password.
-  if ! chsh -s "$ZSH_BIN"; then
-    echo "    chsh failed. Falling back to launching zsh from ~/.bashrc."
-    if [ -f "$HOME/.bashrc" ] && grep -q "dotfiles-wsl: launch zsh" "$HOME/.bashrc"; then
-      echo "    already present, nothing to do"
-    elif [ -L "$HOME/.bashrc" ]; then
-      echo "    ~/.bashrc is a symlink (home-manager managed); not touching it."
-      echo "    Enable programs.bash in home.nix, or fix chsh, to get zsh at login."
-    else
-      cp -f "$HOME/.bashrc" "$HOME/.bashrc.pre-dotfiles-wsl" 2>/dev/null || true
-      cat >> "$HOME/.bashrc" <<BASHRC
+  # chsh needs your UNIX password and fails under some WSL PAM setups.
+  # Fallback: a login bash hands over to zsh.
+  echo "    chsh failed; launching zsh from ~/.bashrc instead."
+  cat >> "$HOME/.bashrc" <<'BASHRC'
 
-# dotfiles-wsl: launch zsh -- remove this block once \`chsh\` is working
-# Guards, in order: only a LOGIN shell, so tooling that runs \`bash -ic "cmd"\`
-# is not hijacked and left hanging; only interactive; only on a real tty; and
-# never recursively. Dropping the login_shell test breaks any such tooling.
-if shopt -q login_shell && [[ \$- == *i* ]] && [ -t 0 ] \\
-   && [ -z "\${ZSH_VERSION:-}" ] && [ -x "$ZSH_BIN" ]; then
-  exec "$ZSH_BIN" -l
+# dotfiles-wsl: launch zsh -- remove this block once `chsh` is working
+# Guards: only a LOGIN, interactive shell on a real tty, never recursively,
+# so tooling that runs `bash -ic "cmd"` is not hijacked.
+if shopt -q login_shell && [[ $- == *i* ]] && [ -t 0 ] \
+   && [ -z "${ZSH_VERSION:-}" ] && [ -x /usr/bin/zsh ]; then
+  exec /usr/bin/zsh -l
 fi
 BASHRC
-      echo "    added to ~/.bashrc (backup: ~/.bashrc.pre-dotfiles-wsl)"
-    fi
-  fi
 fi
 
 echo "==> Step 7: the font on the Windows side"
-# Everything below this point is driven from inside WSL through Windows
-# interop, so there is no separate PowerShell step to run.
 "$DIR/scripts/install-windows-font.sh" || \
   echo "    Font install failed; run ./scripts/install-windows-font.sh later."
 
-echo "==> Step 8: seed the Windows Terminal theme"
-# Only bootstrap does this, never rebuild.sh. Seeding a fresh machine takes
-# nothing away from you; reasserting the theme on every rebuild would fight
-# Windows Terminal's own Settings UI for ownership of settings.json. The script
-# is a no-op if the scheme is already there, so your terminal stays yours.
-#
-# It is still a one-time overwrite of colours, font and opacity, which someone
-# cloning this repo with a terminal they already like will not want. There was
-# no way to decline it short of interrupting the install, so:
+echo "==> Step 8: seed the Windows Terminal theme (first install only)"
+# Seeding once gives a new machine your look; reasserting it on every run would
+# fight Windows Terminal's own Settings UI. The script is a no-op if the scheme
+# is already there.
 if [ -n "${DOTFILES_SKIP_THEME:-}" ]; then
   echo "    DOTFILES_SKIP_THEME is set, leaving Windows Terminal alone."
-  echo "    Only the font was installed. Apply the theme later if you change"
-  echo "    your mind: ./scripts/apply-windows-terminal-theme.sh"
 else
   "$DIR/scripts/apply-windows-terminal-theme.sh" || \
     echo "    Theme not applied; run ./scripts/apply-windows-terminal-theme.sh later."
@@ -177,31 +181,7 @@ cat <<'NEXT'
 
 ==> Done.
 
-Restart Windows Terminal to pick up the font and colour scheme. If glyphs
-still look wrong afterwards, sign out of Windows and back in once so the
-newly registered font is enumerated.
-NEXT
-
-if [ -n "${DOTFILES_SKIP_THEME:-}" ]; then
-  cat <<'NEXT'
-
-Your terminal colours were left exactly as they were.
-NEXT
-else
-  cat <<'NEXT'
-
-The theme was seeded once, just now. From here it is yours: change colours,
-opacity and padding in Windows Terminal's own Settings UI and nothing in
-this repo will overwrite them. The previous settings.json was backed up
-next to itself as settings.json.pre-dotfiles-wsl.*
-NEXT
-fi
-
-cat <<'NEXT'
-
-If you were already in a shell, start a new one so zsh and the Nix
-profile are picked up.
-
-From here on, ./rebuild.sh applies every change to packages, shell and
-editor in one command.
+Open a new terminal to get zsh with the new setup. If glyphs look wrong,
+restart Windows Terminal, or sign out of Windows and back in once.
+Check everything with: ./scripts/check-drift.sh
 NEXT

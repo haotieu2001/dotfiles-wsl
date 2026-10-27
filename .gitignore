@@ -6,9 +6,9 @@ home/.config/herdr/session.json
 home/.config/herdr/*.sock
 home/.config/herdr/.plugins.lock
 
-# nix build output
-result
-result-*
+# backups made by bootstrap.sh and scripts/link.sh
+*.pre-dotfiles-wsl.*
+*.pre-drop-nix
 
 # Windows noise, since this tree is reachable from Explorer over \\wsl.localhost
 Thumbs.db

@@ -3,23 +3,18 @@
 # step, no admin rights.
 #
 # Only the font crosses the WSL/Windows boundary. It has to, because Windows
-# draws the glyphs and cannot see Linux fontconfig - and sourcing it from the
-# Nix store means the font version is pinned by flake.lock like everything else.
+# draws the glyphs and cannot see Linux fontconfig. The source is the copy
+# bootstrap.sh downloaded and checked against the digest in packages/pinned.sh.
 #
 # Colours, opacity, padding and the background image are deliberately NOT
 # synced. Windows Terminal's settings.json is a file you edit through its own
 # UI, and every setting in it is a matter of taste. A repo that overwrites it on
-# every rebuild fights the user for control of their own terminal. Same rule as
-# ~/.claude in home.nix: only manage what this repo owns outright.
+# every run fights the user for control of their own terminal. Only manage
+# what this repo owns outright.
 #
 # Idempotent: re-running changes nothing new.
-# Called automatically by bootstrap.sh and rebuild.sh. Safe to run by hand.
+# Called automatically by bootstrap.sh. Safe to run by hand.
 set -euo pipefail
-
-# The font comes from the home-manager profile. When bootstrap.sh calls this,
-# the calling shell was started before the first switch ever ran, so the profile
-# is not on PATH yet. Put it there rather than depending on the caller.
-export PATH="$HOME/.nix-profile/bin:$PATH"
 
 info() { printf '    %s\n' "$*"; }
 warn() { printf '    ! %s\n' "$*" >&2; }
@@ -61,8 +56,8 @@ if [ ! -d "$WIN_HOME" ]; then
 fi
 
 # --- 1. the font ------------------------------------------------------------
-# Sourced from the Nix store, so the font version is pinned by flake.lock
-# rather than by whatever a download URL happens to serve today.
+# Sourced from bootstrap.sh's checked download, so the version is the one in
+# packages/pinned.sh rather than whatever a download URL happens to serve today.
 # Nerd Fonts ships three families per typeface, and the difference matters to a
 # terminal. Only the file name distinguishes them:
 #
@@ -88,22 +83,21 @@ font_label() {
 
 install_font() {
   local src_dir dest_dir src dest name label changed=0 installed=0
-  src_dir="$(dirname "$(readlink -f "$HOME/.nix-profile/share/fonts/truetype/NerdFonts/Hack/HackNerdFont-Regular.ttf" 2>/dev/null || true)")"
-  if [ ! -d "$src_dir" ]; then
-    warn "Hack Nerd Font not in the Nix profile; is nerd-fonts.hack in home.packages?"
+  src_dir="$HOME/.local/share/fonts/HackNerdFont"
+  if [ ! -f "$src_dir/HackNerdFont-Regular.ttf" ]; then
+    warn "Hack Nerd Font not found in $src_dir; run ./bootstrap.sh first"
     return 0
   fi
 
   dest_dir="$WIN_HOME/AppData/Local/Microsoft/Windows/Fonts"
   mkdir -p "$dest_dir"
 
-  # Every face the Nix package carries, rather than a hand-written list of four.
+  # Every face in the release archive, rather than a hand-written list of four.
   # The list used to name only the four "Hack Nerd Font" faces while
   # windows/profile-defaults.json asked for "Hack Nerd Font Mono", so a fresh
   # machine silently fell back to Cascadia Mono. It went unnoticed because the
   # machine this was written on already had the Mono faces from an earlier
-  # install - the same class of bug as the zsh PATH one in home.nix, and only
-  # visible on a machine that is not already set up.
+  # install - a bug only visible on a machine that is not already set up.
   for src in "$src_dir"/*.ttf; do
     [ -f "$src" ] || continue
     name="$(basename "$src")"
