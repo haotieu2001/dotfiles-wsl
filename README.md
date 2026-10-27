@@ -18,6 +18,17 @@ had before.
 - Hack Nerd Font, installed on the Windows side
 - Your terminal colours, set up on the first install
 
+<p align="center">
+  <img src="docs/assets/screenshot.png" width="900"
+       alt="Windows Terminal after setup, running herdr. The main pane shows tree output of this repo: bootstrap.sh, rebuild.sh, home.nix, the scripts and templates directories. herdr's spaces and agents panels run down the left. The blackpanther colour scheme and its background image show through the terminal's opacity, drawn in Hack Nerd Font.">
+</p>
+
+<p align="center"><sub>
+After <code>./bootstrap.sh</code>: the repo itself, listed inside herdr, with the
+blackpanther scheme showing through in Hack Nerd Font. Taken before the move off
+Nix, so the listing shows the old files; the look is unchanged.
+</sub></p>
+
 ## Contents
 
 - [How it works](#how-it-works)
