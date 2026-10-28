@@ -2,6 +2,10 @@
 
 export EDITOR="nvim"
 
+# Ubuntu's /etc/zsh/zshrc runs compinit unless this is set; ~/.zshrc already
+# does, and running it twice only slows every new shell down.
+skip_global_compinit=1
+
 # Everything this repo installs outside apt lands in ~/.local/bin: uv and the
 # tools it installs, npm globals (prefix ~/.local, set by bootstrap.sh), herdr,
 # lua-language-server, Claude Code, the AWS CLI. Ahead of /usr/bin on purpose,
