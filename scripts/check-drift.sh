@@ -51,6 +51,7 @@ done
 grep -q nix-profile /etc/shells 2>/dev/null && { problem "/etc/shells still lists a Nix zsh"; left=1; }
 grep -qs 'nix-profile' "$HOME/.profile" "$HOME/.bashrc" && { problem "~/.profile or ~/.bashrc still mentions nix-profile"; left=1; }
 case ":$PATH:" in *nix*) problem "PATH still contains a Nix directory"; left=1 ;; esac
+grep -qs 'nix-profile' "$HOME/.gitconfig" && { problem "~/.gitconfig still calls a Nix binary (run: gh auth setup-git)"; left=1; }
 for f in "$HOME/.zshrc" "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.config/starship.toml" "$HOME/.config/nvim"; do
   [ -L "$f" ] && [[ "$(readlink "$f")" == /nix/store/* ]] && { problem "${f/#$HOME/~} still links into /nix/store"; left=1; }
 done

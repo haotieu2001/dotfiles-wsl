@@ -117,6 +117,13 @@ echo "    Hack Nerd Font $NERDFONT_VERSION"
 # Debian calls fd's binary fdfind; give it its usual name.
 ln -sfn /usr/bin/fdfind "$BIN/fd"
 
+# git asks gh for GitHub credentials through an absolute path to gh. Re-point it at
+# the apt gh, or a helper left over from an old install breaks every https push.
+if gh auth status >/dev/null 2>&1; then
+  gh auth setup-git
+  echo "    git credential helper -> $(command -v gh)"
+fi
+
 echo "==> Step 4: link config into \$HOME"
 # Every link goes through ~/.dotfiles, so the repo folder can move or be renamed.
 ln -sfn "$DIR" "$HOME/.dotfiles"
